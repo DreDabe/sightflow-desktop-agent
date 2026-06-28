@@ -666,6 +666,9 @@ function SettingsPanel() {
   const [visionModel, setVisionModel] = useState('')
   const [visionBaseUrl, setVisionBaseUrl] = useState('')
   const [testing, setTesting] = useState(false)
+  const [training, setTraining] = useState(false)
+  const [trainLog, setTrainLog] = useState<{ time: string; message: string }[]>([])
+  const trainLogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -675,10 +678,32 @@ function SettingsPanel() {
         setVisionModel(settings.vision?.model || '')
         setVisionBaseUrl(settings.vision?.baseURL || '')
       }
+      const status = await window.electron?.invoke('train:status')
+      if (status?.running) setTraining(true)
     }
 
     void load()
   }, [])
+
+  useEffect(() => {
+    const handler = (data: any) => {
+      console.log('[SettingsPanel] train:event received:', data)
+      const msg = data?.message || JSON.stringify(data)
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false })
+      setTrainLog((prev) => [...prev, { time, message: msg }])
+      if (data?.type === 'exited' || data?.type === 'completed' || data?.type === 'error') {
+        setTraining(false)
+      }
+    }
+    const cleanup = window.electron?.on('train:event', handler)
+    return () => { cleanup?.() }
+  }, [])
+
+  useEffect(() => {
+    if (trainLogRef.current) {
+      trainLogRef.current.scrollTop = trainLogRef.current.scrollHeight
+    }
+  }, [trainLog])
 
   const handleSaveVision = useCallback(async () => {
     const payload: Partial<AppSettings> = {
@@ -770,6 +795,52 @@ function SettingsPanel() {
           <button className="btn btn-primary" onClick={handleSaveVision} style={{ flex: 1 }}>
             {t('settings.saveVision')}
           </button>
+        </div>
+      </div>
+
+      <div className="card base-settings-card">
+        <div className="card-title">情感模型训练</div>
+        <div className="form-hint" style={{ marginBottom: 12 }}>
+          训练基于 BERT 的抑郁倾向分类模型。训练数据来自 Kaggle 中文抑郁数据集，训练完成后自动保存为 best.pt。
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            className="btn btn-primary"
+            disabled={training}
+            onClick={async () => {
+              setTrainLog([])
+              setTraining(true)
+              const result = await window.electron?.invoke('train:start')
+              if (!result?.ok) {
+                setTraining(false)
+                showToast(result?.error || '启动训练失败', 'error')
+              }
+            }}
+          >
+            {training ? '训练中...' : '开始训练'}
+          </button>
+          {training && (
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                await window.electron?.invoke('train:stop')
+                setTraining(false)
+              }}
+            >
+              停止训练
+            </button>
+          )}
+        </div>
+        <div className="message-log" ref={trainLogRef}>
+          {trainLog.length > 0
+            ? trainLog.map((entry, i) => (
+                <div key={i} className="log-entry">
+                  <span className="log-time">{entry.time}</span>
+                  <span className="log-type train">TRAIN</span>
+                  <span>{entry.message}</span>
+                </div>
+              ))
+            : <div className="message-log-empty">暂无训练日志</div>}
         </div>
       </div>
     </div>

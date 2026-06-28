@@ -41,7 +41,8 @@ import {
 import { TraceStepInput } from '../core/trace/trace-types'
 import { ExperienceStore, NewExperienceCard } from '../core/memory/experience-store'
 import { induceCardsFromSession } from '../core/memory/learn-from-session'
-import { SentimentClassifier } from '../core/sentiment/classifier'
+import { SentimentClassifier, ensurePythonDeps } from '../core/sentiment/classifier'
+import { spawn as spawnChild, ChildProcess } from 'child_process'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 
 const FIXED_ARK_MODEL = 'doubao-seed-2-0-lite-260215'
@@ -143,6 +144,7 @@ let runtimeDevice: DesktopDevice | null = null
 let settingsWindow: BrowserWindow | null = null
 let memoryWindow: BrowserWindow | null = null
 let sentimentClassifier: SentimentClassifier | null = null
+let trainingProcess: ChildProcess | null = null
 
 // ── 工作记忆（work-trace + 经验卡片）单例，首次使用时初始化 ──
 let traceRecorderInstance: TraceRecorder | null = null
@@ -695,6 +697,107 @@ app.whenReady().then(async () => {
       baseURL
     })
     return client.testConnection()
+  })
+
+  // ── 模型训练 IPC ──
+
+  ipcMain.handle('train:start', async () => {
+    if (trainingProcess) {
+      return { ok: false, error: '训练正在进行中' }
+    }
+
+    const scriptDir = join(app.getAppPath(), 'sentpredict')
+
+    try {
+      await ensurePythonDeps(scriptDir)
+    } catch (err: any) {
+      return { ok: false, error: err.message || 'Python 依赖安装失败' }
+    }
+
+    const sendTrainEvent = (data: any) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('train:event', data)
+        }
+      }
+    }
+
+    console.log('[Train] 正在启动训练进程...')
+    console.log('[Train] ⚠ 训练过程耗时较长（约数小时），请耐心等待。训练进度将在下方日志中实时显示。')
+    sendTrainEvent({
+      type: 'hint',
+      message: '⚠ 训练过程耗时较长（约数小时），请耐心等待。训练进度将在下方日志中实时显示。'
+    })
+    trainingProcess = spawnChild('python', ['train_server.py'], {
+      cwd: scriptDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        HF_ENDPOINT: 'https://hf-mirror.com',
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1'
+      }
+    })
+
+    let buffer = ''
+
+    trainingProcess.stdout?.on('data', (data: Buffer) => {
+      buffer += data.toString()
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed)
+          console.log('[Train]', parsed.message || JSON.stringify(parsed))
+          sendTrainEvent(parsed)
+        } catch {}
+      }
+    })
+
+    trainingProcess.stderr?.on('data', (data: Buffer) => {
+      const msg = data.toString().trim()
+      if (msg) {
+        console.error('[Train] Python stderr:', msg)
+        sendTrainEvent({
+          type: 'stderr',
+          message: msg
+        })
+      }
+    })
+
+    trainingProcess.on('error', (err) => {
+      console.error('[Train] 进程异常:', err.message)
+      sendTrainEvent({ type: 'error', message: err.message })
+      trainingProcess = null
+    })
+
+    trainingProcess.on('exit', (code) => {
+      console.log(`[Train] 进程退出 (code: ${code})`)
+      sendTrainEvent({
+        type: 'exited',
+        code,
+        message: code === 0 ? '训练进程已结束' : `训练进程异常退出 (code: ${code})`
+      })
+      trainingProcess = null
+    })
+
+    return { ok: true }
+  })
+
+  ipcMain.handle('train:stop', async () => {
+    if (!trainingProcess) {
+      return { ok: false, error: '没有正在进行的训练' }
+    }
+    trainingProcess.kill()
+    trainingProcess = null
+    return { ok: true }
+  })
+
+  ipcMain.handle('train:status', async () => {
+    return { running: trainingProcess !== null }
   })
 
   // ── Capture / 框选向导 IPC ──

@@ -1,7 +1,35 @@
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, execSync, ChildProcess } from 'child_process'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { SentimentResult } from './types'
 
 const CLASS_NAMES = ['无抑郁', '轻度抑郁', '中度抑郁', '重度抑郁', '极重度抑郁']
+
+export async function ensurePythonDeps(scriptDir: string): Promise<void> {
+  const reqFile = join(scriptDir, 'requirements.txt')
+  if (!existsSync(reqFile)) return
+
+  try {
+    execSync('python -c "import torch; import transformers; import pandas; import sklearn; import kagglehub; import tqdm; import numpy"', {
+      stdio: 'pipe',
+      timeout: 10000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+    })
+  } catch {
+    console.log('[PythonDeps] 检测到缺少 Python 依赖，正在安装...')
+    try {
+      execSync(`pip install -r "${reqFile}"`, {
+        stdio: 'pipe',
+        timeout: 600000,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+      })
+      console.log('[PythonDeps] Python 依赖安装完成 ✓')
+    } catch (installErr: any) {
+      console.error('[PythonDeps] 依赖安装失败:', installErr?.message || installErr)
+      throw new Error('Python 依赖安装失败，请手动执行: pip install -r sentpredict/requirements.txt')
+    }
+  }
+}
 
 export class SentimentClassifier {
   private process: ChildProcess | null = null
@@ -14,6 +42,8 @@ export class SentimentClassifier {
 
   async start(scriptDir: string): Promise<void> {
     if (this.process) return
+
+    await ensurePythonDeps(scriptDir)
 
     return new Promise((resolve, reject) => {
       console.log('[SentimentClassifier] 正在启动 Python 子进程...')

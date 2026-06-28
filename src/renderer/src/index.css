@@ -586,6 +586,7 @@ button:focus-visible {
 .log-type.reply { color: var(--accent); }
 .log-type.skip { color: var(--text-muted); }
 .log-type.error { color: var(--error); }
+.log-type.train { color: #a78bfa; }
 
 /* ─── Form Elements ─── */
 .form-group { margin-bottom: 14px; }
