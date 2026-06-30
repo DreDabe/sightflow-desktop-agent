@@ -74,6 +74,9 @@ interface AppSettings {
   models: ModelConfig[]
   globalVisionModelId: string
   globalReplyModelId: string
+  modes: ReplyMode[]
+  globalDefaultModeId: string
+  globalAutoReply: boolean
 }
 
 type ProviderConfigFieldType = 'text' | 'password' | 'url' | 'select' | 'textarea'
@@ -142,7 +145,10 @@ const settingsStore = new StoreClass({
     capture: {},
     models: [],
     globalVisionModelId: '',
-    globalReplyModelId: ''
+    globalReplyModelId: '',
+    modes: [],
+    globalDefaultModeId: '',
+    globalAutoReply: false
   }
 })
 
@@ -505,7 +511,10 @@ app.whenReady().then(async () => {
       },
       models: Array.isArray(data.models) ? data.models : current.models,
       globalVisionModelId: typeof data.globalVisionModelId === 'string' ? data.globalVisionModelId : current.globalVisionModelId,
-      globalReplyModelId: typeof data.globalReplyModelId === 'string' ? data.globalReplyModelId : current.globalReplyModelId
+      globalReplyModelId: typeof data.globalReplyModelId === 'string' ? data.globalReplyModelId : current.globalReplyModelId,
+      modes: Array.isArray(data.modes) ? data.modes : current.modes,
+      globalDefaultModeId: typeof data.globalDefaultModeId === 'string' ? data.globalDefaultModeId : current.globalDefaultModeId,
+      globalAutoReply: typeof data.globalAutoReply === 'boolean' ? data.globalAutoReply : current.globalAutoReply
     } satisfies AppSettings
 
     settingsStore.set(next as any)
@@ -687,7 +696,157 @@ app.whenReady().then(async () => {
     return client.testConnection()
   })
 
-  // ── 工作记忆：轨迹查询 / 回放 ──
+  // ── 模式 CRUD ──
+  ipcMain.handle('mode:list', async () => {
+    const settings = normalizeSettings(settingsStore.store)
+    return ensureSystemModes(settings.modes)
+  })
+
+  ipcMain.handle('mode:create', async (_event, input: Partial<ReplyMode>) => {
+    const name = typeof input?.name === 'string' ? input.name.trim() : ''
+    const prompt = typeof input?.prompt === 'string' ? input.prompt : ''
+    if (!name) return { success: false, error: '模式名称不能为空' }
+    if (!prompt) return { success: false, error: '回复规则不能为空' }
+
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const duplicate = allModes.find((m) => m.name === name)
+    if (duplicate) return { success: false, error: '模式名称已存在' }
+
+    const newMode: ReplyMode = {
+      id: randomUUID(),
+      name,
+      source: 'custom',
+      prompt,
+      sentimentEnabled: !!input?.sentimentEnabled,
+      unifiedPrefix: typeof input?.unifiedPrefix === 'string' ? input.unifiedPrefix : '',
+      enabled: true,
+      running: false,
+      specificObjects: [],
+      autoReply: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }
+
+    const nextModes = [...settings.modes.filter((m) => !isSystemModeId(m.id)), newMode]
+    settingsStore.set({ ...settings, modes: nextModes } as any)
+    return { success: true, mode: newMode }
+  })
+
+  ipcMain.handle('mode:update', async (_event, id: string, input: Partial<ReplyMode>) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: '无效的模式 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const index = allModes.findIndex((m) => m.id === id)
+    if (index === -1) return { success: false, error: '模式不存在' }
+
+    const name = typeof input?.name === 'string' ? input.name.trim() : ''
+    if (name) {
+      const duplicate = allModes.find((m) => m.name === name && m.id !== id)
+      if (duplicate) return { success: false, error: '模式名称已存在' }
+    }
+
+    const updated = { ...allModes[index], updatedAt: Date.now() }
+    if (name) updated.name = name
+    if (typeof input?.prompt === 'string') updated.prompt = input.prompt
+    if (typeof input?.sentimentEnabled === 'boolean') updated.sentimentEnabled = input.sentimentEnabled
+    if (typeof input?.unifiedPrefix === 'string') updated.unifiedPrefix = input.unifiedPrefix
+    if (typeof input?.enabled === 'boolean') updated.enabled = input.enabled
+    if (typeof input?.autoReply === 'boolean') updated.autoReply = input.autoReply
+
+    const nextModes = allModes.map((m, i) => (i === index ? updated : m))
+    settingsStore.set({ ...settings, modes: nextModes.filter((m) => !isSystemModeId(m.id)) } as any)
+    return { success: true, mode: updated }
+  })
+
+  ipcMain.handle('mode:delete', async (_event, id: string) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: '无效的模式 ID' }
+    if (isSystemModeId(id)) return { success: false, error: '系统预设模式不可删除' }
+    const settings = normalizeSettings(settingsStore.store)
+    const nextModes = settings.modes.filter((m) => m.id !== id)
+    if (nextModes.length === settings.modes.length) return { success: false, error: '模式不存在' }
+
+    const updates: Partial<AppSettings> = { modes: nextModes }
+    if (settings.globalDefaultModeId === id) updates.globalDefaultModeId = ''
+    settingsStore.set({ ...settings, ...updates } as any)
+    return { success: true }
+  })
+
+  ipcMain.handle('mode:toggleEnabled', async (_event, id: string, enabled: boolean) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: '无效的模式 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const mode = allModes.find((m) => m.id === id)
+    if (!mode) return { success: false, error: '模式不存在' }
+
+    mode.enabled = !!enabled
+    mode.updatedAt = Date.now()
+    const nextModes = allModes.filter((m) => !isSystemModeId(m.id))
+    const existingCustom = nextModes.findIndex((m) => m.id === id)
+    if (existingCustom >= 0) nextModes[existingCustom] = mode
+    else nextModes.push(mode)
+
+    settingsStore.set({ ...settings, modes: nextModes } as any)
+    return { success: true, mode }
+  })
+
+  // ── 特定对象 CRUD ──
+  ipcMain.handle('object:create', async (_event, modeId: string, input: Partial<SpecificObject>) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
+    const objName = typeof input?.name === 'string' ? input.name.trim() : ''
+    if (!objName) return { success: false, error: '对象名称不能为空' }
+
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const allObjects = allModes.flatMap((m) => m.specificObjects || [])
+    const duplicate = allObjects.find((o) => o.name === objName)
+    if (duplicate) return { success: false, error: `该对象名称已存在于[${allModes.find((m) => m.specificObjects?.some((o) => o.id === duplicate.id))?.name || '未知'}]模式中` }
+
+    const targetModeId = typeof input?.modeId === 'string' && input.modeId ? input.modeId : modeId
+    const targetMode = allModes.find((m) => m.id === targetModeId)
+    if (!targetMode) return { success: false, error: '目标模式不存在' }
+
+    const newObject: SpecificObject = {
+      id: randomUUID(),
+      name: objName,
+      title: typeof input?.title === 'string' ? input.title : '',
+      relationship: typeof input?.relationship === 'string' ? input.relationship : '',
+      modeId: targetModeId,
+      autoReply: typeof input?.autoReply === 'boolean' ? input.autoReply : null
+    }
+
+    targetMode.specificObjects = [...(targetMode.specificObjects || []), newObject]
+    targetMode.updatedAt = Date.now()
+    const nextModes = allModes.filter((m) => !isSystemModeId(m.id))
+    const existingIdx = nextModes.findIndex((m) => m.id === targetModeId)
+    if (existingIdx >= 0) nextModes[existingIdx] = targetMode
+    else nextModes.push(targetMode)
+
+    settingsStore.set({ ...settings, modes: nextModes } as any)
+    return { success: true, object: newObject, modeId: targetModeId }
+  })
+
+  ipcMain.handle('object:delete', async (_event, modeId: string, objectId: string) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
+    if (typeof objectId !== 'string' || !objectId) return { success: false, error: '无效的对象 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const mode = allModes.find((m) => m.id === modeId)
+    if (!mode) return { success: false, error: '模式不存在' }
+
+    const prevLen = mode.specificObjects?.length || 0
+    mode.specificObjects = (mode.specificObjects || []).filter((o) => o.id !== objectId)
+    if (mode.specificObjects.length === prevLen) return { success: false, error: '对象不存在' }
+
+    mode.updatedAt = Date.now()
+    const nextModes = allModes.filter((m) => !isSystemModeId(m.id))
+    const existingIdx = nextModes.findIndex((m) => m.id === modeId)
+    if (existingIdx >= 0) nextModes[existingIdx] = mode
+    else nextModes.push(mode)
+
+    settingsStore.set({ ...settings, modes: nextModes } as any)
+    return { success: true }
+  })
   ipcMain.handle('memory:open', async () => {
     createMemoryWindow()
     return { success: true }
@@ -1457,7 +1616,10 @@ function normalizeSettings(raw: any): AppSettings {
     capture: normalizeCapture(raw?.capture),
     models,
     globalVisionModelId: typeof raw?.globalVisionModelId === 'string' ? raw.globalVisionModelId : '',
-    globalReplyModelId: typeof raw?.globalReplyModelId === 'string' ? raw.globalReplyModelId : ''
+    globalReplyModelId: typeof raw?.globalReplyModelId === 'string' ? raw.globalReplyModelId : '',
+    modes: normalizeModes(raw?.modes),
+    globalDefaultModeId: typeof raw?.globalDefaultModeId === 'string' ? raw.globalDefaultModeId : '',
+    globalAutoReply: !!raw?.globalAutoReply
   }
 }
 
@@ -1480,6 +1642,70 @@ function normalizeModels(raw: unknown, fallbackVision: { apiKey: string; model: 
   }
 
   return []
+}
+
+const SYSTEM_MODE_IDS = ['system-depression', 'system-romance', 'system-high-eq']
+
+function isSystemModeId(id: string): boolean {
+  return SYSTEM_MODE_IDS.includes(id)
+}
+
+function ensureSystemModes(customModes: ReplyMode[]): ReplyMode[] {
+  const systemModes: ReplyMode[] = [
+    {
+      id: 'system-depression',
+      name: '抑郁预测',
+      source: 'system',
+      prompt: '你是一个善于识别抑郁倾向并提供温暖关怀的回复助手。请根据对话内容判断对方是否有抑郁倾向，并给出温暖、关怀、鼓励性的回复。如果对方表现出明显的抑郁倾向，请在回复中适当表达关心。',
+      sentimentEnabled: true,
+      unifiedPrefix: '',
+      enabled: true,
+      running: false,
+      specificObjects: [],
+      autoReply: false,
+      createdAt: 0,
+      updatedAt: 0
+    },
+    {
+      id: 'system-romance',
+      name: '恋爱',
+      source: 'system',
+      prompt: '你是一个恋爱风格的回复助手。请用浪漫、甜蜜、体贴的语气回复对方的消息，保持轻松愉快的氛围。',
+      sentimentEnabled: false,
+      unifiedPrefix: '',
+      enabled: true,
+      running: false,
+      specificObjects: [],
+      autoReply: false,
+      createdAt: 0,
+      updatedAt: 0
+    },
+    {
+      id: 'system-high-eq',
+      name: '高情商',
+      source: 'system',
+      prompt: '你是一个高情商的回复助手。请用得体、周到、善解人意的语气回复对方的消息，注意措辞的恰当性，照顾对方的感受，避免可能的误解。',
+      sentimentEnabled: false,
+      unifiedPrefix: '',
+      enabled: true,
+      running: false,
+      specificObjects: [],
+      autoReply: false,
+      createdAt: 0,
+      updatedAt: 0
+    }
+  ]
+
+  const custom = Array.isArray(customModes)
+    ? customModes.filter((m) => m && typeof m === 'object' && typeof m.id === 'string' && !isSystemModeId(m.id))
+    : []
+
+  return [...systemModes, ...custom]
+}
+
+function normalizeModes(raw: unknown): ReplyMode[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && m.id && !isSystemModeId(m.id)) as ReplyMode[]
 }
 
 function withSchemaDefaults(

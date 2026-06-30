@@ -11,7 +11,7 @@ interface LogEntry {
 }
 
 type EngineStatus = 'idle' | 'running' | 'error'
-type SettingsSection = 'base' | 'model' | 'agent'
+type SettingsSection = 'base' | 'model' | 'mode' | 'agent'
 type AppType = 'wechat' | 'wework' | 'dingtalk' | 'lark' | 'slack' | 'telegram' | 'generic'
 
 type CaptureStrategy = 'auto' | 'vlm' | 'box-select'
@@ -141,6 +141,30 @@ interface AppSettings {
   globalReplyModelId: string
 }
 
+interface SpecificObject {
+  id: string
+  name: string
+  title: string
+  relationship: string
+  modeId: string
+  autoReply: boolean | null
+}
+
+interface ReplyMode {
+  id: string
+  name: string
+  source: 'system' | 'custom'
+  prompt: string
+  sentimentEnabled: boolean
+  unifiedPrefix: string
+  enabled: boolean
+  running: boolean
+  specificObjects: SpecificObject[]
+  autoReply: boolean
+  createdAt: number
+  updatedAt: number
+}
+
 interface ModelConfig {
   id: string
   name: string
@@ -261,15 +285,30 @@ const RefreshIcon = (): React.JSX.Element => (
 function App() {
   const windowKind = new URLSearchParams(window.location.search).get('window')
   const [status, setStatus] = useState<EngineStatus>('idle')
+  const [modes, setModes] = useState<ReplyMode[]>([])
+  const [activeModeId, setActiveModeId] = useState<string>('')
+  const [showAddModeModal, setShowAddModeModal] = useState(false)
 
-  // Sync UI status with engine state changes triggered out-of-band
-  // (e.g. remote OpenClaw start/pause via the local skill HTTP server).
   useEffect(() => {
     const cleanup = window.electron?.on('engine:state', (data: { status: 'running' | 'idle' }) => {
       setStatus(data.status === 'running' ? 'running' : 'idle')
     })
     return cleanup
   }, [])
+
+  const loadModes = useCallback(async () => {
+    const list = (await window.electron?.invoke('mode:list')) as ReplyMode[]
+    setModes(list || [])
+    setActiveModeId((prev) => {
+      if (prev && list?.some((m) => m.id === prev && m.enabled)) return prev
+      const firstEnabled = list?.find((m) => m.enabled)
+      return firstEnabled?.id || ''
+    })
+  }, [])
+
+  useEffect(() => {
+    void loadModes()
+  }, [loadModes])
 
   if (windowKind === 'settings') {
     return (
@@ -289,19 +328,433 @@ function App() {
     )
   }
 
+  const enabledModes = modes.filter((m) => m.enabled)
+  const activeMode = modes.find((m) => m.id === activeModeId)
+
   return (
-    <div className="app">
-      <header className="app-header">
-        <img src={logoUrl} alt="SightFlow" className="app-logo" />
-      </header>
+    <div className="app main-shell">
+      <aside className="main-sidebar">
+        <div className="main-sidebar-brand">
+          <img src={logoUrl} alt="SightFlow" className="app-logo" />
+        </div>
+        <div className="main-sidebar-modes">
+          {enabledModes.map((mode) => (
+            <button
+              key={mode.id}
+              className={`main-sidebar-item ${mode.id === activeModeId ? 'active' : ''}`}
+              onClick={() => setActiveModeId(mode.id)}
+              title={mode.name}
+            >
+              <span className="main-sidebar-item-name">{mode.name}</span>
+              {mode.source === 'system' && <span className="main-sidebar-item-badge">系统</span>}
+            </button>
+          ))}
+        </div>
+        <div className="main-sidebar-divider" />
+        <button
+          className="main-sidebar-item main-sidebar-item-add"
+          onClick={() => setShowAddModeModal(true)}
+        >
+          + 添加模式
+        </button>
+        <div className="main-sidebar-divider" />
+        <button
+          className="main-sidebar-item"
+          onClick={() => window.electron?.invoke('settings:open')}
+          title="设置"
+        >
+          <GearIcon /> 设置
+        </button>
+        <button
+          className="main-sidebar-item"
+          onClick={() => window.electron?.invoke('memory:open')}
+          title="工作记忆"
+        >
+          <MemoryIcon /> 工作记忆
+        </button>
+      </aside>
 
-      <div className="app-content">
-        <ControlPanel status={status} setStatus={setStatus} />
-      </div>
+      <main className="main-content">
+        {activeMode ? (
+          <ModeSubInterface key={activeMode.id} mode={activeMode} status={status} setStatus={setStatus} onModesChanged={loadModes} />
+        ) : (
+          <div className="main-content-empty">
+            <p>请从左侧选择一个模式，或添加新的自定义模式</p>
+          </div>
+        )}
+      </main>
 
-      <BottomBar status={status} setStatus={setStatus} />
+      {showAddModeModal && (
+        <AddModeModal
+          onClose={() => setShowAddModeModal(false)}
+          onSaved={() => { loadModes(); setShowAddModeModal(false) }}
+        />
+      )}
 
       <Toast />
+    </div>
+  )
+}
+
+function ModeSubInterface({
+  mode,
+  status,
+  setStatus,
+  onModesChanged
+}: {
+  mode: ReplyMode
+  status: EngineStatus
+  setStatus: (s: EngineStatus) => void
+  onModesChanged: () => void
+}): React.JSX.Element {
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [recommendedReply, setRecommendedReply] = useState('')
+  const [modeData, setModeData] = useState(mode)
+  const [appType, setAppType] = useState<AppType>('wechat')
+  const [showAddObjectModal, setShowAddObjectModal] = useState(false)
+  const logRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const load = async () => {
+      const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
+      if (settings) setAppType(settings.appType || 'wechat')
+    }
+    void load()
+  }, [])
+
+  useEffect(() => {
+    setModeData(mode)
+  }, [mode])
+
+  const addLog = useCallback((type: LogEntry['type'], content: string) => {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false })
+    setLogs((prev) => [...prev.slice(-99), { time, type, content }])
+  }, [])
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+  }, [logs])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('engine:log', (data: { type: string; content: string }) => {
+      addLog(data.type as LogEntry['type'], data.content)
+      if (data.type === 'reply') setRecommendedReply(data.content)
+      if (data.type === 'error' && data.content.includes('引擎无法启动')) setStatus('error')
+    })
+    return cleanup
+  }, [addLog, setStatus])
+
+  const handleStart = useCallback(async () => {
+    const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
+    const visionModel = settings?.models?.find((m) => m.id === settings.globalVisionModelId)
+    if (!visionModel && !settings?.vision?.apiKey) {
+      showToast('请先配置视觉模型', 'error')
+      return
+    }
+    const result = await window.electron?.invoke('engine:start', settings)
+    if (result?.success) {
+      setStatus('running')
+      showToast('引擎已启动', 'success')
+    } else {
+      setStatus('error')
+      showToast(result?.error || '启动失败', 'error')
+    }
+  }, [setStatus])
+
+  const handleStop = useCallback(async () => {
+    await window.electron?.invoke('engine:stop')
+    setStatus('idle')
+    showToast('引擎已停止', 'success')
+  }, [setStatus])
+
+  const handleToggleAutoReply = useCallback(async () => {
+    const next = !modeData.autoReply
+    const result = await window.electron?.invoke('mode:update', modeData.id, { autoReply: next })
+    if (result?.success) {
+      setModeData((prev) => ({ ...prev, autoReply: next }))
+      onModesChanged()
+    }
+  }, [modeData, onModesChanged])
+
+  const handleDeleteObject = useCallback(async (objectId: string) => {
+    const result = await window.electron?.invoke('object:delete', modeData.id, objectId)
+    if (result?.success) {
+      setModeData((prev) => ({
+        ...prev,
+        specificObjects: prev.specificObjects.filter((o) => o.id !== objectId)
+      }))
+      onModesChanged()
+    } else {
+      showToast(result?.error || '删除失败', 'error')
+    }
+  }, [modeData, onModesChanged])
+
+  const handlePaste = useCallback(async () => {
+    if (!recommendedReply) return
+    await window.electron?.invoke('reply:paste', recommendedReply)
+  }, [recommendedReply])
+
+  const handleSend = useCallback(async () => {
+    if (!recommendedReply) return
+    await window.electron?.invoke('reply:send', recommendedReply)
+  }, [recommendedReply])
+
+  const running = status === 'running'
+  const statusLabel = running ? '运行中' : '已停止'
+  const appTypeLabel = APP_TYPE_LABELS[appType] || appType
+
+  return (
+    <div className="mode-subinterface fade-in">
+      <div className="mode-header">
+        <div className="mode-header-left">
+          <h2 className="mode-name">{modeData.name}</h2>
+          <span className={`mode-status ${running ? 'running' : 'stopped'}`}>
+            <span className={`status-dot ${running ? 'running' : 'idle'}`} />
+            {statusLabel}
+          </span>
+        </div>
+        <div className="mode-header-right">
+          {running ? (
+            <button className="btn btn-stop" onClick={handleStop}>
+              <StopIcon /> 停止
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={handleStart}>
+              <PlayIcon /> 启动
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mode-info-row">
+        <div className="mode-info-item">
+          <span className="mode-info-label">目标应用</span>
+          <span className="mode-info-value">{appTypeLabel}</span>
+        </div>
+        <div className="mode-info-item">
+          <span className="mode-info-label">自动回复</span>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={modeData.autoReply} onChange={handleToggleAutoReply} />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+        {modeData.sentimentEnabled && (
+          <div className="mode-info-item">
+            <span className="mode-info-badge">情感分析</span>
+          </div>
+        )}
+        {modeData.unifiedPrefix && (
+          <div className="mode-info-item">
+            <span className="mode-info-badge">统一开头: {modeData.unifiedPrefix}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          特定对象
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)}>+ 添加</button>
+        </div>
+        {modeData.specificObjects.length === 0 ? (
+          <div className="message-log-empty">暂无特定对象</div>
+        ) : (
+          <div className="object-list">
+            {modeData.specificObjects.map((obj) => (
+              <div key={obj.id} className="object-item">
+                <div className="object-item-info">
+                  <span className="object-item-name">{obj.name}</span>
+                  {obj.title && <span className="object-item-detail">称呼: {obj.title}</span>}
+                  {obj.relationship && <span className="object-item-detail">关系: {obj.relationship}</span>}
+                </div>
+                <button className="btn btn-secondary btn-sm" style={{ color: '#ef4444' }} onClick={() => handleDeleteObject(obj.id)}>删除</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">运行日志</div>
+        <div className="message-log" ref={logRef}>
+          {logs.length === 0 ? (
+            <div className="message-log-empty">暂无日志</div>
+          ) : (
+            logs.map((entry, i) => (
+              <div className="log-entry" key={i}>
+                <span className="log-time">{entry.time}</span>
+                <span className={`log-type ${entry.type}`}>{entry.type}</span>
+                <span>{entry.content}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">推荐回复</div>
+        <textarea
+          className="form-input recommended-reply"
+          value={recommendedReply}
+          onChange={(e) => setRecommendedReply(e.target.value)}
+          placeholder="AI 生成的推荐回复将显示在这里"
+          rows={3}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handlePaste}>一键粘贴</button>
+          <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>一键回复</button>
+        </div>
+      </div>
+
+      {showAddObjectModal && (
+        <AddObjectModal
+          modeId={modeData.id}
+          modes={[]}
+          onClose={() => setShowAddObjectModal(false)}
+          onSaved={(newObj) => {
+            setModeData((prev) => ({
+              ...prev,
+              specificObjects: [...prev.specificObjects, newObj]
+            }))
+            onModesChanged()
+            setShowAddObjectModal(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function AddModeModal({
+  onClose,
+  onSaved
+}: {
+  onClose: () => void
+  onSaved: () => void
+}): React.JSX.Element {
+  const [name, setName] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [sentimentEnabled, setSentimentEnabled] = useState(false)
+  const [unifiedPrefix, setUnifiedPrefix] = useState('')
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) { showToast('模式名称不能为空', 'error'); return }
+    if (!prompt.trim()) { showToast('回复规则不能为空', 'error'); return }
+
+    const result = await window.electron?.invoke('mode:create', {
+      name: name.trim(),
+      prompt: prompt.trim(),
+      sentimentEnabled,
+      unifiedPrefix
+    })
+    if (result?.success) {
+      showToast('模式已添加', 'success')
+      onSaved()
+    } else {
+      showToast(result?.error || '添加失败', 'error')
+    }
+  }, [name, prompt, sentimentEnabled, unifiedPrefix, onSaved])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>添加自定义模式</h2>
+        <div className="form-group">
+          <label className="form-label">模式名称 <span className="required-mark">*</span></label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：高情商" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">回复规则 (Prompt) <span className="required-mark">*</span></label>
+          <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="AI 回复的引导提示词" rows={4} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">情感分析</label>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
+            <span className="toggle-slider" />
+          </label>
+          <div className="form-hint">开启后该模式运行时使用情感分析</div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">统一开头</label>
+          <input className="form-input" value={unifiedPrefix} onChange={(e) => setUnifiedPrefix(e.target.value)} placeholder="例如：【机器客服自动回复】" />
+          <div className="form-hint">回复内容前自动添加的文字</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" onClick={handleSave}>添加</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddObjectModal({
+  modeId,
+  modes,
+  onClose,
+  onSaved
+}: {
+  modeId: string
+  modes: ReplyMode[]
+  onClose: () => void
+  onSaved: (obj: SpecificObject) => void
+}): React.JSX.Element {
+  const [name, setName] = useState('')
+  const [title, setTitle] = useState('')
+  const [relationship, setRelationship] = useState('')
+  const [targetModeId, setTargetModeId] = useState(modeId)
+  const [autoReply, setAutoReply] = useState<boolean | null>(null)
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) { showToast('对象名称不能为空', 'error'); return }
+    const result = await window.electron?.invoke('object:create', modeId, {
+      name: name.trim(),
+      title: title.trim(),
+      relationship: relationship.trim(),
+      modeId: targetModeId,
+      autoReply
+    })
+    if (result?.success) {
+      showToast('特定对象已添加', 'success')
+      onSaved(result.object)
+    } else {
+      showToast(result?.error || '添加失败', 'error')
+    }
+  }, [name, title, relationship, targetModeId, autoReply, modeId, onSaved])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>添加特定对象</h2>
+        <div className="form-group">
+          <label className="form-label">名称 <span className="required-mark">*</span></label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="对方在聊天软件中的名称" />
+          <div className="form-hint">用于 VLM 匹配识别</div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">特定称呼</label>
+          <input className="form-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如：老张、王总" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">关系</label>
+          <input className="form-input" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="例如：姐姐、老板" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">自动回复</label>
+          <select className="form-input" value={autoReply === null ? '' : autoReply ? 'true' : 'false'} onChange={(e) => {
+            if (e.target.value === '') setAutoReply(null)
+            else setAutoReply(e.target.value === 'true')
+          }}>
+            <option value="">跟随模式设置</option>
+            <option value="true">开启</option>
+            <option value="false">关闭</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" onClick={handleSave}>添加</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -673,6 +1126,12 @@ function SettingsWindow(): React.JSX.Element {
           模型配置
         </button>
         <button
+          className={`settings-nav-item ${section === 'mode' ? 'active' : ''}`}
+          onClick={() => setSection('mode')}
+        >
+          模式管理
+        </button>
+        <button
           className={`settings-nav-item ${section === 'agent' ? 'active' : ''}`}
           onClick={() => setSection('agent')}
         >
@@ -681,7 +1140,7 @@ function SettingsWindow(): React.JSX.Element {
       </aside>
 
       <main className="settings-main">
-        {section === 'base' ? <SettingsPanel /> : section === 'model' ? <ModelConfigPanel /> : <AgentPanel />}
+        {section === 'base' ? <SettingsPanel /> : section === 'model' ? <ModelConfigPanel /> : section === 'mode' ? <ModeManagePanel /> : <AgentPanel />}
       </main>
     </div>
   )
@@ -1153,6 +1612,130 @@ function ModelEditModal({
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
           <button className="btn btn-secondary" onClick={onClose}>取消</button>
           <button className="btn btn-primary" onClick={handleSave}>{isEdit ? '保存' : '添加'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModeManagePanel(): React.JSX.Element {
+  const [modes, setModes] = useState<ReplyMode[]>([])
+  const [globalDefaultModeId, setGlobalDefaultModeId] = useState('')
+  const [globalAutoReply, setGlobalAutoReply] = useState(false)
+
+  const loadModes = useCallback(async () => {
+    const list = (await window.electron?.invoke('mode:list')) as ReplyMode[]
+    setModes(list || [])
+    const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
+    setGlobalDefaultModeId(settings?.globalDefaultModeId || '')
+    setGlobalAutoReply(!!settings?.globalAutoReply)
+  }, [])
+
+  useEffect(() => {
+    void loadModes()
+  }, [loadModes])
+
+  const handleToggleEnabled = useCallback(async (id: string, enabled: boolean) => {
+    const result = await window.electron?.invoke('mode:toggleEnabled', id, enabled)
+    if (result?.success) {
+      setModes((prev) => prev.map((m) => (m.id === id ? { ...m, enabled } : m)))
+    } else {
+      showToast(result?.error || '操作失败', 'error')
+    }
+  }, [])
+
+  const handleDelete = useCallback(async (id: string) => {
+    const result = await window.electron?.invoke('mode:delete', id)
+    if (result?.success) {
+      setModes((prev) => prev.filter((m) => m.id !== id))
+      showToast('模式已删除', 'success')
+    } else {
+      showToast(result?.error || '删除失败', 'error')
+    }
+  }, [])
+
+  const handleSetDefault = useCallback(async (id: string) => {
+    setGlobalDefaultModeId(id)
+    await window.electron?.invoke('settings:set', { globalDefaultModeId: id })
+  }, [])
+
+  const handleSetGlobalAutoReply = useCallback(async (val: boolean) => {
+    setGlobalAutoReply(val)
+    await window.electron?.invoke('settings:set', { globalAutoReply: val })
+  }, [])
+
+  return (
+    <div className="settings-page slide-up">
+      <div className="settings-page-header">
+        <div>
+          <h1>模式管理</h1>
+          <p>管理回复模式，配置全局默认模式和自动回复设置。</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">全局设置</div>
+        <div className="form-group">
+          <label className="form-label">全局默认模式</label>
+          <select className="form-input" value={globalDefaultModeId} onChange={(e) => handleSetDefault(e.target.value)}>
+            <option value="">高情商（默认）</option>
+            {modes.filter((m) => m.enabled).map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+          <div className="form-hint">未匹配特定对象时使用的模式</div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">全局自动回复</label>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={globalAutoReply} onChange={(e) => handleSetGlobalAutoReply(e.target.checked)} />
+            <span className="toggle-slider" />
+          </label>
+          <div className="form-hint">非特定对象的默认自动回复设置</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">模式列表</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {modes.map((mode) => (
+            <div key={mode.id} className="provider-card" style={{ cursor: 'default' }}>
+              <div className="provider-card-top">
+                <span className="provider-name">{mode.name}</span>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {mode.source === 'system' && <span className="mode-info-badge">系统</span>}
+                  <span className={`mode-status ${mode.enabled ? 'running' : 'stopped'}`} style={{ fontSize: 11 }}>
+                    {mode.enabled ? '已启用' : '已禁用'}
+                  </span>
+                </div>
+              </div>
+              <div className="provider-desc" style={{ maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {mode.prompt.slice(0, 80)}{mode.prompt.length > 80 ? '...' : ''}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleToggleEnabled(mode.id, !mode.enabled)}
+                >
+                  {mode.enabled ? '禁用' : '启用'}
+                </button>
+                {mode.source === 'custom' && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ color: '#ef4444' }}
+                    onClick={() => handleDelete(mode.id)}
+                  >
+                    删除
+                  </button>
+                )}
+                {mode.specificObjects.length > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {mode.specificObjects.length} 个特定对象
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
