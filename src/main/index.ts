@@ -152,7 +152,7 @@ const settingsStore = new StoreClass({
   }
 })
 
-let runtime: RuntimeHost<ReturnType<typeof createInitialGenericChannelState>> | null = null
+const runtimeInstances = new Map<string, RuntimeHost<ReturnType<typeof createInitialGenericChannelState>>>()
 let runtimeDevice: DesktopDevice | null = null
 let settingsWindow: BrowserWindow | null = null
 let memoryWindow: BrowserWindow | null = null
@@ -786,6 +786,25 @@ app.whenReady().then(async () => {
     return { success: true, mode }
   })
 
+  ipcMain.handle('mode:start', async (_event, modeId: string) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const mode = allModes.find((m) => m.id === modeId)
+    if (!mode) return { success: false, error: '模式不存在' }
+    if (!mode.enabled) return { success: false, error: '模式未启用' }
+    const result = await startEngineCore(settings, modeId)
+    if (result.ok) return { success: true }
+    return { success: false, error: result.message || result.reason }
+  })
+
+  ipcMain.handle('mode:stop', async (_event, modeId: string) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
+    const result = await stopEngineCore('mode_stop', modeId)
+    if (result.ok) return { success: true }
+    return { success: false, error: result.message || result.reason }
+  })
+
   // ── 特定对象 CRUD ──
   ipcMain.handle('object:create', async (_event, modeId: string, input: Partial<SpecificObject>) => {
     if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
@@ -947,7 +966,11 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('engine:status', async () => {
-    return { running: runtime?.isRunning() ?? false }
+    const runningModes: string[] = []
+    for (const [modeId, rt] of runtimeInstances) {
+      if (rt.isRunning()) runningModes.push(modeId)
+    }
+    return { running: runningModes.length > 0, runningModes }
   })
 
   ipcMain.handle('engine:updateConfig', async (_event, config) => {
@@ -957,8 +980,10 @@ app.whenReady().then(async () => {
       runtimeDevice.setApiKey(settings.vision.apiKey)
       runtimeDevice.setAppType(settings.appType)
     }
-    if (runtime) {
-      runtime.updateAppType(settings.appType)
+    if (runtimeInstances.size > 0) {
+      for (const rt of runtimeInstances.values()) {
+        rt.updateAppType(settings.appType)
+      }
     }
     return { success: true }
   })
@@ -1201,9 +1226,10 @@ app.on('before-quit', () => {
 
 // ── 引擎启动 / 暂停核心逻辑（IPC 与 Skill HTTP Server 共用） ──
 
-async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
-  if (runtime?.isRunning()) {
-    return { ok: false, reason: 'already_running', message: '引擎已在运行中' }
+async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillStartResult> {
+  const effectiveModeId = modeId || 'default'
+  if (runtimeInstances.has(effectiveModeId) && runtimeInstances.get(effectiveModeId)!.isRunning()) {
+    return { ok: false, reason: 'already_running', message: '该模式引擎已在运行中' }
   }
 
   try {
@@ -1261,7 +1287,7 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
     const mainWindow = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null
     const log = (type: 'thinking' | 'reply' | 'skip' | 'error', content: string): void => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('engine:log', { type, content })
+        mainWindow.webContents.send('engine:log', { type, content, modeId: effectiveModeId })
       }
     }
 
@@ -1335,7 +1361,7 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       sentimentClassifier = null
     }
 
-    runtime = new RuntimeHost({
+    const runtime = new RuntimeHost({
       appType,
       channel,
       provider,
@@ -1343,7 +1369,12 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       onLog: log,
       onTrace,
       getMemoryCards: () => getExperienceStore().getActiveCardBriefs(),
-      onSessionEnd: () => recorder.endSession(),
+      onSessionEnd: () => {
+        recorder.endSession()
+        runtimeInstances.delete(effectiveModeId)
+        notifyEngineStateChanged(runtimeInstances.size > 0 ? 'running' : 'idle')
+        notifyModeRunningChanged(effectiveModeId, false)
+      },
       extractChatText: extractChatTextFn,
       classifySentiment: classifySentimentFn,
       getAutoReply: () => {
@@ -1353,7 +1384,7 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       onRecommendReply: (text: string) => {
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
-            win.webContents.send('engine:recommendReply', { text })
+            win.webContents.send('engine:recommendReply', { text, modeId: effectiveModeId })
           }
         }
       },
@@ -1401,11 +1432,14 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       }
     })
 
+    runtimeInstances.set(effectiveModeId, runtime)
+
     runtime.startSession().catch((err: any) => {
       console.error('[Main] Runtime session error:', err)
     })
 
     notifyEngineStateChanged('running')
+    notifyModeRunningChanged(effectiveModeId, true)
 
     return { ok: true }
   } catch (error: any) {
@@ -1435,25 +1469,49 @@ function resolveModelConfig(
   }
 }
 
-async function stopEngineCore(stopReason: string): Promise<SkillPauseResult> {
-  if (!runtime?.isRunning()) {
+async function stopEngineCore(stopReason: string, modeId?: string): Promise<SkillPauseResult> {
+  if (modeId) {
+    const rt = runtimeInstances.get(modeId)
+    if (!rt?.isRunning()) {
+      return { ok: false, reason: 'not_running', message: '该模式引擎未运行' }
+    }
+    try {
+      await rt.stopSession(stopReason)
+      runtimeInstances.delete(modeId)
+      notifyEngineStateChanged(runtimeInstances.size > 0 ? 'running' : 'idle')
+      notifyModeRunningChanged(modeId, false)
+      return { ok: true }
+    } catch (error: any) {
+      return {
+        ok: false,
+        reason: 'pause_failed',
+        message: error?.message || String(error)
+      }
+    }
+  }
+
+  if (runtimeInstances.size === 0) {
     return { ok: false, reason: 'not_running', message: '引擎未运行' }
   }
-  try {
-    await runtime.stopSession(stopReason)
-    if (sentimentClassifier) {
-      sentimentClassifier.stop()
-      sentimentClassifier = null
-    }
-    notifyEngineStateChanged('idle')
-    return { ok: true }
-  } catch (error: any) {
-    return {
-      ok: false,
-      reason: 'pause_failed',
-      message: error?.message || String(error)
+
+  const errors: string[] = []
+  for (const [id, rt] of runtimeInstances) {
+    try {
+      await rt.stopSession(stopReason)
+      notifyModeRunningChanged(id, false)
+    } catch (error: any) {
+      errors.push(`${id}: ${error?.message || String(error)}`)
     }
   }
+  runtimeInstances.clear()
+  if (sentimentClassifier) {
+    sentimentClassifier.stop()
+    sentimentClassifier = null
+  }
+  notifyEngineStateChanged('idle')
+  return errors.length > 0
+    ? { ok: false, reason: 'pause_failed' as const, message: errors.join('; ') }
+    : { ok: true }
 }
 
 /** 通知 Renderer 引擎状态变化（让 UI 在远程启停时同步切换） */
@@ -1461,6 +1519,14 @@ function notifyEngineStateChanged(status: 'running' | 'idle'): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('engine:state', { status })
+    }
+  }
+}
+
+function notifyModeRunningChanged(modeId: string, running: boolean): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('mode:runningChanged', { modeId, running })
     }
   }
 }
@@ -1552,7 +1618,7 @@ function persistRegionsAndStickyStrategy(
 const skillEngineController: SkillEngineController = {
   start: () => startEngineCore(),
   pause: () => stopEngineCore('skill_pause'),
-  isRunning: () => runtime?.isRunning() ?? false
+  isRunning: () => runtimeInstances.size > 0
 }
 
 // In this file you can include the rest of your app's specific main process
