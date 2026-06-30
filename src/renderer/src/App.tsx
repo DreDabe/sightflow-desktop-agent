@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { t } from './i18n'
 import logoUrl from './assets/logo.png'
 import MemoryWindow from './MemoryWindow'
 import './index.css'
@@ -286,6 +285,13 @@ function App() {
     void loadModes()
   }, [loadModes])
 
+  useEffect(() => {
+    const cleanup = window.electron?.on('mode:changed', () => {
+      void loadModes()
+    })
+    return cleanup
+  }, [loadModes])
+
   if (windowKind === 'settings') {
     return (
       <div className="app settings-window">
@@ -321,8 +327,8 @@ function App() {
               onClick={() => setActiveModeId(mode.id)}
               title={mode.name}
             >
+              <span className={`mode-status-dot ${mode.running ? 'running' : 'idle'}`} />
               <span className="main-sidebar-item-name">{mode.name}</span>
-              {mode.source === 'system' && <span className="main-sidebar-item-badge">系统</span>}
             </button>
           ))}
         </div>
@@ -334,20 +340,22 @@ function App() {
           + 添加模式
         </button>
         <div className="main-sidebar-divider" />
-        <button
-          className="main-sidebar-item"
-          onClick={() => window.electron?.invoke('settings:open')}
-          title="设置"
-        >
-          <GearIcon /> 设置
-        </button>
-        <button
-          className="main-sidebar-item"
-          onClick={() => window.electron?.invoke('memory:open')}
-          title="工作记忆"
-        >
-          <MemoryIcon /> 工作记忆
-        </button>
+        <div className="main-sidebar-bottom">
+          <button
+            className="main-sidebar-item main-sidebar-bottom-btn"
+            onClick={() => window.electron?.invoke('settings:open')}
+            title="设置"
+          >
+            <GearIcon /> 设置
+          </button>
+          <button
+            className="main-sidebar-item main-sidebar-bottom-btn"
+            onClick={() => window.electron?.invoke('memory:open')}
+            title="工作记忆"
+          >
+            <MemoryIcon /> 记忆
+          </button>
+        </div>
       </aside>
 
       <main className="main-content">
@@ -549,9 +557,9 @@ function ModeSubInterface({
         )}
       </div>
 
-      <div className="card">
+      <div className="card mode-card-compact">
         <div className="card-title">运行日志</div>
-        <div className="message-log" ref={logRef}>
+        <div className="message-log mode-log-compact" ref={logRef}>
           {logs.length === 0 ? (
             <div className="message-log-empty">暂无日志</div>
           ) : (
@@ -584,12 +592,11 @@ function ModeSubInterface({
       {showAddObjectModal && (
         <AddObjectModal
           modeId={modeData.id}
-          modes={[]}
           onClose={() => setShowAddObjectModal(false)}
           onSaved={(newObj) => {
             setModeData((prev) => ({
               ...prev,
-              specificObjects: [...prev.specificObjects, newObj]
+              specificObjects: [...(prev.specificObjects || []), newObj]
             }))
             onModesChanged()
             setShowAddObjectModal(false)
@@ -778,9 +785,6 @@ function SettingsWindow(): React.JSX.Element {
 }
 
 function SettingsPanel() {
-  const [visionApiKey, setVisionApiKey] = useState('')
-  const [visionModel, setVisionModel] = useState('')
-  const [visionBaseUrl, setVisionBaseUrl] = useState('')
   const [testing, setTesting] = useState(false)
   const [training, setTraining] = useState(false)
   const [trainLog, setTrainLog] = useState<{ time: string; message: string }[]>([])
@@ -793,9 +797,6 @@ function SettingsPanel() {
     const load = async () => {
       const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
       if (settings) {
-        setVisionApiKey(settings.vision?.apiKey || '')
-        setVisionModel(settings.vision?.model || '')
-        setVisionBaseUrl(settings.vision?.baseURL || '')
         setModels(settings.models || [])
         setGlobalVisionModelId(settings.globalVisionModelId || '')
         setGlobalReplyModelId(settings.globalReplyModelId || '')
@@ -809,7 +810,6 @@ function SettingsPanel() {
 
   useEffect(() => {
     const handler = (data: any) => {
-      console.log('[SettingsPanel] train:event received:', data)
       const msg = data?.message || JSON.stringify(data)
       const time = new Date().toLocaleTimeString('en-US', { hour12: false })
       setTrainLog((prev) => [...prev, { time, message: msg }])
@@ -827,96 +827,29 @@ function SettingsPanel() {
     }
   }, [trainLog])
 
-  const handleSaveVision = useCallback(async () => {
-    const payload: Partial<AppSettings> = {
-      vision: { apiKey: visionApiKey, model: visionModel, baseURL: visionBaseUrl }
-    }
-    await window.electron?.invoke('settings:set', payload)
-    await window.electron?.invoke('engine:updateConfig', {
-      ...((await window.electron?.invoke('settings:getAll')) as AppSettings),
-      ...payload,
-      vision: { apiKey: visionApiKey, model: visionModel, baseURL: visionBaseUrl }
-    })
-    showToast(t('settings.saved'), 'success')
-  }, [visionApiKey, visionModel, visionBaseUrl])
-
-  const handleTestConnection = useCallback(async () => {
-    if (!visionApiKey) return
+  const handleTestConnection = useCallback(async (modelId: string) => {
+    if (!modelId) return
     setTesting(true)
     try {
-      const result = await window.electron?.invoke('engine:testConnection', {
-        apiKey: visionApiKey,
-        model: visionModel,
-        baseURL: visionBaseUrl
-      })
+      const result = await window.electron?.invoke('model:testConnection', modelId)
       if (result?.success) {
-        showToast(t('settings.testConnection.success'), 'success')
+        showToast('连接测试成功', 'success')
       } else {
-        showToast(`${t('settings.testConnection.fail')}: ${result?.error || ''}`, 'error')
+        showToast(`连接测试失败: ${result?.error || ''}`, 'error')
       }
     } catch (e: any) {
-      showToast(`${t('settings.testConnection.fail')}: ${e.message}`, 'error')
+      showToast(`连接测试失败: ${e.message}`, 'error')
     } finally {
       setTesting(false)
     }
-  }, [visionApiKey, visionModel, visionBaseUrl])
+  }, [])
 
   return (
-    <div className="settings-page slide-up">
+    <div className="settings-page">
       <div className="settings-page-header">
         <div>
           <h1>基础配置</h1>
           <p>维护桌面端运行所需的基础参数。</p>
-        </div>
-      </div>
-
-      <div className="card base-settings-card">
-        <div className="card-title">{t('settings.vision')}</div>
-
-        <div className="form-group">
-          <label className="form-label">{t('settings.visionApiKey')}</label>
-          <input
-            className="form-input"
-            type="password"
-            value={visionApiKey}
-            onChange={(e) => setVisionApiKey(e.target.value)}
-            placeholder={t('settings.visionApiKey.placeholder')}
-            autoComplete="off"
-          />
-          <div className="form-hint">{t('settings.visionApiKey.hint')}</div>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">{t('settings.visionModel')}</label>
-          <input
-            className="form-input"
-            value={visionModel}
-            onChange={(e) => setVisionModel(e.target.value)}
-            placeholder="doubao-seed-2-0-lite-260215"
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">{t('settings.visionBaseUrl')}</label>
-          <input
-            className="form-input"
-            value={visionBaseUrl}
-            onChange={(e) => setVisionBaseUrl(e.target.value)}
-            placeholder="https://ark.cn-beijing.volces.com/api/v3"
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className="btn btn-secondary"
-            onClick={handleTestConnection}
-            disabled={!visionApiKey || testing}
-          >
-            {testing ? t('settings.testConnection.testing') : t('settings.testConnection')}
-          </button>
-          <button className="btn btn-primary" onClick={handleSaveVision} style={{ flex: 1 }}>
-            {t('settings.saveVision')}
-          </button>
         </div>
       </div>
 
@@ -935,17 +868,8 @@ function SettingsPanel() {
               const id = e.target.value
               setGlobalVisionModelId(id)
               await window.electron?.invoke('settings:set', { globalVisionModelId: id })
-              if (id) {
-                const selected = models.find((m) => m.id === id)
-                if (selected) {
-                  setVisionApiKey(selected.apiKey)
-                  setVisionModel(selected.modelName)
-                  setVisionBaseUrl(selected.baseURL)
-                }
-              }
             }}
           >
-            <option value="">使用下方视觉配置</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
             ))}
@@ -964,12 +888,21 @@ function SettingsPanel() {
               await window.electron?.invoke('settings:set', { globalReplyModelId: id })
             }}
           >
-            <option value="">使用视觉模型</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
             ))}
           </select>
-          <div className="form-hint">用于 AI 回复生成，未选择时使用视觉模型</div>
+          <div className="form-hint">用于 AI 回复生成</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => handleTestConnection(globalVisionModelId)}
+            disabled={!globalVisionModelId || testing}
+          >
+            {testing ? '测试中...' : '测试连接'}
+          </button>
         </div>
       </div>
 
@@ -1069,7 +1002,7 @@ function ModelConfigPanel(): React.JSX.Element {
     : models
 
   return (
-    <div className="settings-page slide-up">
+    <div className="settings-page">
       <div className="settings-page-header">
         <div>
           <h1>模型配置</h1>
@@ -1253,6 +1186,7 @@ function ModeManagePanel(): React.JSX.Element {
   const [modes, setModes] = useState<ReplyMode[]>([])
   const [globalDefaultModeId, setGlobalDefaultModeId] = useState('')
   const [globalAutoReply, setGlobalAutoReply] = useState(false)
+  const [editingMode, setEditingMode] = useState<ReplyMode | null>(null)
 
   const loadModes = useCallback(async () => {
     const list = (await window.electron?.invoke('mode:list')) as ReplyMode[]
@@ -1270,6 +1204,7 @@ function ModeManagePanel(): React.JSX.Element {
     const result = await window.electron?.invoke('mode:toggleEnabled', id, enabled)
     if (result?.success) {
       setModes((prev) => prev.map((m) => (m.id === id ? { ...m, enabled } : m)))
+      window.electron?.send('mode:changed')
     } else {
       showToast(result?.error || '操作失败', 'error')
     }
@@ -1280,6 +1215,7 @@ function ModeManagePanel(): React.JSX.Element {
     if (result?.success) {
       setModes((prev) => prev.filter((m) => m.id !== id))
       showToast('模式已删除', 'success')
+      window.electron?.send('mode:changed')
     } else {
       showToast(result?.error || '删除失败', 'error')
     }
@@ -1296,7 +1232,7 @@ function ModeManagePanel(): React.JSX.Element {
   }, [])
 
   return (
-    <div className="settings-page slide-up">
+    <div className="settings-page">
       <div className="settings-page-header">
         <div>
           <h1>模式管理</h1>
@@ -1309,8 +1245,7 @@ function ModeManagePanel(): React.JSX.Element {
         <div className="form-group">
           <label className="form-label">全局默认模式</label>
           <select className="form-input" value={globalDefaultModeId} onChange={(e) => handleSetDefault(e.target.value)}>
-            <option value="">高情商（默认）</option>
-            {modes.filter((m) => m.enabled).map((m) => (
+            {modes.map((m) => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
@@ -1330,7 +1265,7 @@ function ModeManagePanel(): React.JSX.Element {
         <div className="card-title">模式列表</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {modes.map((mode) => (
-            <div key={mode.id} className="provider-card" style={{ cursor: 'default' }}>
+            <div key={mode.id} className="provider-card" style={{ cursor: 'pointer' }} onClick={() => setEditingMode(mode)}>
               <div className="provider-card-top">
                 <span className="provider-name">{mode.name}</span>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -1343,7 +1278,7 @@ function ModeManagePanel(): React.JSX.Element {
               <div className="provider-desc" style={{ maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {mode.prompt.slice(0, 80)}{mode.prompt.length > 80 ? '...' : ''}
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleToggleEnabled(mode.id, !mode.enabled)}
@@ -1367,6 +1302,103 @@ function ModeManagePanel(): React.JSX.Element {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {editingMode && (
+        <ModeDetailModal
+          mode={editingMode}
+          onClose={() => setEditingMode(null)}
+          onSaved={() => { loadModes(); setEditingMode(null); window.electron?.send('mode:changed') }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModeDetailModal({
+  mode,
+  onClose,
+  onSaved
+}: {
+  mode: ReplyMode
+  onClose: () => void
+  onSaved: () => void
+}): React.JSX.Element {
+  const [name, setName] = useState(mode.name)
+  const [prompt, setPrompt] = useState(mode.prompt)
+  const [sentimentEnabled, setSentimentEnabled] = useState(mode.sentimentEnabled)
+  const [unifiedPrefix, setUnifiedPrefix] = useState(mode.unifiedPrefix)
+  const [autoReply, setAutoReply] = useState(mode.autoReply)
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) { showToast('模式名称不能为空', 'error'); return }
+    if (!prompt.trim()) { showToast('回复规则不能为空', 'error'); return }
+
+    const result = await window.electron?.invoke('mode:update', mode.id, {
+      name: name.trim(),
+      prompt: prompt.trim(),
+      sentimentEnabled,
+      unifiedPrefix,
+      autoReply
+    })
+    if (result?.success) {
+      showToast('模式已更新', 'success')
+      onSaved()
+    } else {
+      showToast(result?.error || '更新失败', 'error')
+    }
+  }, [mode.id, name, prompt, sentimentEnabled, unifiedPrefix, autoReply, onSaved])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>模式详情 - {mode.name}</h2>
+        <div className="form-group">
+          <label className="form-label">模式名称</label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">回复规则 (Prompt)</label>
+          <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={6} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">情感分析</label>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+        <div className="form-group">
+          <label className="form-label">统一开头</label>
+          <input className="form-input" value={unifiedPrefix} onChange={(e) => setUnifiedPrefix(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">自动回复</label>
+          <label className="toggle-switch">
+            <input type="checkbox" checked={autoReply} onChange={(e) => setAutoReply(e.target.checked)} />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+        {mode.specificObjects.length > 0 && (
+          <div className="form-group">
+            <label className="form-label">特定对象 ({mode.specificObjects.length})</label>
+            <div className="object-list">
+              {mode.specificObjects.map((obj) => (
+                <div key={obj.id} className="object-item">
+                  <div className="object-item-info">
+                    <span className="object-item-name">{obj.name}</span>
+                    {obj.title && <span className="object-item-detail">称呼: {obj.title}</span>}
+                    {obj.relationship && <span className="object-item-detail">关系: {obj.relationship}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" onClick={handleSave}>保存</button>
         </div>
       </div>
     </div>
@@ -1507,7 +1539,7 @@ function AgentPanel(): React.JSX.Element {
   }, [persistProvider, selectedProvider, selectedValues])
 
   return (
-    <div className="settings-page slide-up">
+    <div className="settings-page">
       <div className="settings-page-header">
         <div>
           <div className="settings-title-row">

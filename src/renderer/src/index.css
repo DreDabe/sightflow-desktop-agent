@@ -990,6 +990,27 @@ textarea.form-input {
   color: var(--text-muted);
 }
 
+.mode-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mode-status-dot.idle {
+  background: #6b7280;
+}
+
+.mode-status-dot.running {
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+}
+
+.mode-status-dot.starting {
+  background: #60a5fa;
+  box-shadow: 0 0 6px rgba(96, 165, 250, 0.5);
+}
+
 .main-sidebar-item-add {
   color: var(--accent);
   justify-content: center;
@@ -999,6 +1020,19 @@ textarea.form-input {
   height: 1px;
   background: var(--glass-border);
   margin: 8px 4px;
+}
+
+.main-sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+.main-sidebar-bottom-btn {
+  flex: 1;
+  justify-content: center;
+  font-size: 12px;
 }
 
 .main-content {
@@ -1086,7 +1120,7 @@ textarea.form-input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 6px 20px;
   border: 1px solid rgba(248, 113, 113, 0.3);
   background: var(--error-bg);
   color: var(--error);
@@ -1094,6 +1128,7 @@ textarea.form-input {
   font-size: 13px;
   cursor: pointer;
   transition: all var(--transition-fast);
+  white-space: nowrap;
 }
 
 .btn-stop:hover {
@@ -1192,6 +1227,34 @@ textarea.form-input {
   resize: vertical;
   font-family: var(--font-sans);
   line-height: 1.5;
+}
+
+select option {
+  background: #1e1e2e;
+  color: #e2e8f0;
+}
+
+.mode-card-compact {
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.mode-card-compact .card-title {
+  flex-shrink: 0;
+}
+
+.mode-log-compact {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.object-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 /* ─── Work Memory（工作记忆窗口） ─── */
