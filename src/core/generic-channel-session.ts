@@ -101,15 +101,28 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
         break
 
       case 'provider.reply_text': {
-        const sendStart = Date.now()
-        await this.device.sendMessage(event.content)
-        ctx.host.log('reply', event.content)
-        ctx.host.trace({
-          phase: 'act',
-          summary: '发送回复',
-          action: { kind: 'send', payload: event.content },
-          outcome: { status: 'ok', latencyMs: Date.now() - sendStart }
-        })
+        const replyText = event.content
+        ctx.host.recommendReply(replyText)
+        const autoReply = ctx.host.getAutoReply()
+        if (autoReply) {
+          const sendStart = Date.now()
+          await this.device.sendMessage(replyText)
+          ctx.host.log('reply', replyText)
+          ctx.host.trace({
+            phase: 'act',
+            summary: '自动发送回复',
+            action: { kind: 'send', payload: replyText },
+            outcome: { status: 'ok', latencyMs: Date.now() - sendStart }
+          })
+        } else {
+          ctx.host.log('reply', `[推荐回复] ${replyText}`)
+          ctx.host.trace({
+            phase: 'act',
+            summary: '生成推荐回复（未自动发送）',
+            action: { kind: 'send', payload: replyText },
+            outcome: { status: 'skip', detail: 'autoReply off' }
+          })
+        }
         await this.device.setChatBaseline()
         ctx.state.latestChatBaseline = Date.now()
         ctx.host.enqueue({ type: 'check_unread' })

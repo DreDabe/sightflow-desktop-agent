@@ -38,14 +38,13 @@ export interface RuntimeHostControls {
   schedule(event: SessionEvent, delayMs: number): void
   runProvider(input: ProviderInput): AsyncIterable<ProviderEvent>
   log(type: 'thinking' | 'reply' | 'skip' | 'error', content: string): void
-  /** 记录一条结构化工作轨迹（work-trace）。无 recorder 时为 no-op。 */
   trace(step: TraceStepInput): void
   isRunning(): boolean
   stopSession(reason?: string): Promise<void>
-  /** 从截图中提取聊天文本（VLM 调用）。未配置时为 undefined。 */
   extractChatText?(screenshot: string): Promise<string>
-  /** 对文本进行情感分类（Python 子进程）。未配置时为 undefined。 */
   classifySentiment?(text: string): Promise<SentimentResult>
+  getAutoReply(): boolean
+  recommendReply(text: string): void
 }
 
 export interface ChannelContext<TState> {

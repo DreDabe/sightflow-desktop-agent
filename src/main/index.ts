@@ -1345,7 +1345,18 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       getMemoryCards: () => getExperienceStore().getActiveCardBriefs(),
       onSessionEnd: () => recorder.endSession(),
       extractChatText: extractChatTextFn,
-      classifySentiment: classifySentimentFn
+      classifySentiment: classifySentimentFn,
+      getAutoReply: () => {
+        const current = normalizeSettings(settingsStore.store)
+        return current.globalAutoReply
+      },
+      onRecommendReply: (text: string) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('engine:recommendReply', { text })
+          }
+        }
+      }
     })
 
     runtime.startSession().catch((err: any) => {

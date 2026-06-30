@@ -17,16 +17,13 @@ interface RuntimeHostOptions<TState> {
   provider: ProviderAdapter
   initialState: TState
   onLog?: (type: 'thinking' | 'reply' | 'skip' | 'error', content: string) => void
-  /** work-trace 落点：channel 通过 host.trace() 提交的每条轨迹都会回调到这里 */
   onTrace?: (step: TraceStepInput) => void
-  /** 每轮 provider 调用前取当前启用的经验卡片，注入 ProviderInput */
   getMemoryCards?: () => MemoryCardBrief[]
-  /** 会话结束（含内部错误停止）时回调，用于收尾轨迹会话 */
   onSessionEnd?: () => void
-  /** 从截图中提取聊天文本（VLM 调用）。未配置时跳过情感分析。 */
   extractChatText?: (screenshot: string) => Promise<string>
-  /** 对文本进行情感分类（Python 子进程）。未配置时跳过情感分析。 */
   classifySentiment?: (text: string) => Promise<SentimentResult>
+  getAutoReply?: () => boolean
+  onRecommendReply?: (text: string) => void
 }
 
 export class RuntimeHost<TState> {
@@ -103,7 +100,9 @@ export class RuntimeHost<TState> {
       isRunning: () => this.running,
       stopSession: async (reason?: string) => this.stopSession(reason),
       extractChatText: this.options.extractChatText,
-      classifySentiment: this.options.classifySentiment
+      classifySentiment: this.options.classifySentiment,
+      getAutoReply: () => this.options.getAutoReply?.() ?? true,
+      recommendReply: (text: string) => this.options.onRecommendReply?.(text)
     }
   }
 

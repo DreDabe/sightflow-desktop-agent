@@ -422,11 +422,17 @@ function ModeSubInterface({
   useEffect(() => {
     const cleanup = window.electron?.on('engine:log', (data: { type: string; content: string }) => {
       addLog(data.type as LogEntry['type'], data.content)
-      if (data.type === 'reply') setRecommendedReply(data.content)
       if (data.type === 'error' && data.content.includes('引擎无法启动')) setStatus('error')
     })
     return cleanup
   }, [addLog, setStatus])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('engine:recommendReply', (data: { text: string }) => {
+      setRecommendedReply(data.text)
+    })
+    return cleanup
+  }, [])
 
   const handleStart = useCallback(async () => {
     const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
