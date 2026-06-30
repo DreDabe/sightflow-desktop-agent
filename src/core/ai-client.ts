@@ -121,6 +121,31 @@ export class AIClient {
     )
   }
 
+  async detectContactName(screenshotBase64: string): Promise<string> {
+    const DETECT_CONTACT_PROMPT = `你会收到一张微信/企业微信的聊天窗口截图。
+
+## 你的任务
+识别当前聊天窗口的对话对象名称（即顶部标题栏中的联系人名称）。
+
+## 规则
+1. 只输出联系人名称，不要添加任何解释或标注
+2. 如果是群聊，输出群名称
+3. 如果无法识别，输出空字符串
+4. 名称要完整，不要截断`
+
+    try {
+      const result = await this.callVision(
+        '你是一个聊天窗口分析专家。请严格按照用户要求的格式输出。',
+        DETECT_CONTACT_PROMPT,
+        screenshotBase64
+      )
+      return result.trim()
+    } catch (error: any) {
+      console.error('[AIClient] 联系人名称识别失败:', error?.message || error)
+      return ''
+    }
+  }
+
   /**
    * 纯文本调用（不带图片）— 用于 testConnection 等
    */

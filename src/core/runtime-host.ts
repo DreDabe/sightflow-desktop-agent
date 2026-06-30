@@ -24,6 +24,8 @@ interface RuntimeHostOptions<TState> {
   classifySentiment?: (text: string) => Promise<SentimentResult>
   getAutoReply?: () => boolean
   onRecommendReply?: (text: string) => void
+  identifyContact?: (screenshot: string) => Promise<string>
+  resolveMode?: (contactName: string) => { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
 }
 
 export class RuntimeHost<TState> {
@@ -102,7 +104,9 @@ export class RuntimeHost<TState> {
       extractChatText: this.options.extractChatText,
       classifySentiment: this.options.classifySentiment,
       getAutoReply: () => this.options.getAutoReply?.() ?? true,
-      recommendReply: (text: string) => this.options.onRecommendReply?.(text)
+      recommendReply: (text: string) => this.options.onRecommendReply?.(text),
+      identifyContact: (screenshot: string) => this.options.identifyContact?.(screenshot) ?? Promise.resolve(''),
+      resolveMode: (contactName: string) => this.options.resolveMode?.(contactName) ?? null
     }
   }
 

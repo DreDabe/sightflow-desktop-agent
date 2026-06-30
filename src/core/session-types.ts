@@ -45,6 +45,8 @@ export interface RuntimeHostControls {
   classifySentiment?(text: string): Promise<SentimentResult>
   getAutoReply(): boolean
   recommendReply(text: string): void
+  identifyContact(screenshot: string): Promise<string>
+  resolveMode(contactName: string): { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
 }
 
 export interface ChannelContext<TState> {

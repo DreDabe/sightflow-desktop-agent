@@ -1356,6 +1356,48 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
             win.webContents.send('engine:recommendReply', { text })
           }
         }
+      },
+      identifyContact: async (screenshot: string) => {
+        try {
+          const textClient = new AIClient({
+            apiKey: visionModel.apiKey,
+            model: visionModel.modelName,
+            baseURL: visionModel.baseURL
+          })
+          return await textClient.detectContactName(screenshot)
+        } catch {
+          return ''
+        }
+      },
+      resolveMode: (contactName: string) => {
+        const current = normalizeSettings(settingsStore.store)
+        const allModes = ensureSystemModes(current.modes)
+        const enabledModes = allModes.filter((m) => m.enabled)
+        for (const mode of enabledModes) {
+          const obj = mode.specificObjects.find((o) => o.name === contactName)
+          if (obj) {
+            return {
+              modeId: mode.id,
+              modeName: mode.name,
+              prompt: mode.prompt,
+              autoReply: obj.autoReply !== null ? obj.autoReply : mode.autoReply,
+              sentimentEnabled: mode.sentimentEnabled,
+              unifiedPrefix: mode.unifiedPrefix
+            }
+          }
+        }
+        const defaultMode = allModes.find((m) => m.id === current.globalDefaultModeId && m.enabled)
+        if (defaultMode) {
+          return {
+            modeId: defaultMode.id,
+            modeName: defaultMode.name,
+            prompt: defaultMode.prompt,
+            autoReply: defaultMode.autoReply,
+            sentimentEnabled: defaultMode.sentimentEnabled,
+            unifiedPrefix: defaultMode.unifiedPrefix
+          }
+        }
+        return null
       }
     })
 

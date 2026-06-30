@@ -12,12 +12,24 @@ import { SentimentResult } from './sentiment/types'
 export interface GenericChannelState {
   measuredAt: number | null
   latestChatBaseline: number | null
+  currentContactName: string
+  currentModeId: string | null
+  currentModeAutoReply: boolean
+  currentModePrompt: string | null
+  currentModeSentimentEnabled: boolean
+  currentModeUnifiedPrefix: string
 }
 
 export function createInitialGenericChannelState(): GenericChannelState {
   return {
     measuredAt: null,
-    latestChatBaseline: null
+    latestChatBaseline: null,
+    currentContactName: '',
+    currentModeId: null,
+    currentModeAutoReply: true,
+    currentModePrompt: null,
+    currentModeSentimentEnabled: false,
+    currentModeUnifiedPrefix: ''
   }
 }
 
@@ -87,6 +99,34 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
           summary: '截取当前聊天窗口',
           screenshotBase64: screenshot
         })
+
+        let contactName = ''
+        try {
+          contactName = await ctx.host.identifyContact(screenshot)
+          if (contactName) {
+            ctx.host.log('thinking', `识别到对话对象: ${contactName}`)
+          }
+        } catch {
+          ctx.host.log('thinking', '对话对象识别失败，使用默认模式')
+        }
+
+        ctx.state.currentContactName = contactName
+        const resolvedMode = contactName ? ctx.host.resolveMode(contactName) : null
+        if (resolvedMode) {
+          ctx.state.currentModeId = resolvedMode.modeId
+          ctx.state.currentModeAutoReply = resolvedMode.autoReply
+          ctx.state.currentModePrompt = resolvedMode.prompt
+          ctx.state.currentModeSentimentEnabled = resolvedMode.sentimentEnabled
+          ctx.state.currentModeUnifiedPrefix = resolvedMode.unifiedPrefix
+          ctx.host.log('thinking', `路由到模式: ${resolvedMode.modeName}`)
+        } else {
+          ctx.state.currentModeId = null
+          ctx.state.currentModeAutoReply = ctx.host.getAutoReply()
+          ctx.state.currentModePrompt = null
+          ctx.state.currentModeSentimentEnabled = false
+          ctx.state.currentModeUnifiedPrefix = ''
+        }
+
         void this.forwardProviderEvents(screenshot, ctx)
         break
       }
@@ -101,9 +141,12 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
         break
 
       case 'provider.reply_text': {
-        const replyText = event.content
+        let replyText = event.content
+        if (ctx.state.currentModeUnifiedPrefix) {
+          replyText = ctx.state.currentModeUnifiedPrefix + replyText
+        }
         ctx.host.recommendReply(replyText)
-        const autoReply = ctx.host.getAutoReply()
+        const autoReply = ctx.state.currentModeAutoReply
         if (autoReply) {
           const sendStart = Date.now()
           await this.device.sendMessage(replyText)
@@ -287,6 +330,12 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
   private resetState(state: GenericChannelState): void {
     state.measuredAt = null
     state.latestChatBaseline = null
+    state.currentContactName = ''
+    state.currentModeId = null
+    state.currentModeAutoReply = true
+    state.currentModePrompt = null
+    state.currentModeSentimentEnabled = false
+    state.currentModeUnifiedPrefix = ''
   }
 
   private async tryOpenUnreadConversation(
