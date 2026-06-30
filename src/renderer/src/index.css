@@ -1033,6 +1033,12 @@ textarea.form-input {
   flex: 1;
   justify-content: center;
   font-size: 12px;
+  padding: 6px;
+}
+
+.main-sidebar-bottom-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .main-content {
@@ -1085,6 +1091,10 @@ textarea.form-input {
   color: var(--accent);
 }
 
+.mode-status.stopped {
+  color: var(--error);
+}
+
 .mode-info-row {
   display: flex;
   gap: 16px;
@@ -1116,11 +1126,16 @@ textarea.form-input {
   color: var(--accent);
 }
 
+.mode-badge-system {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+}
+
 .btn-stop {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 20px;
+  padding: 4px 28px;
   border: 1px solid rgba(248, 113, 113, 0.3);
   background: var(--error-bg);
   color: var(--error);
@@ -1129,6 +1144,8 @@ textarea.form-input {
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  min-width: 100px;
+  height: 28px;
 }
 
 .btn-stop:hover {
@@ -1232,21 +1249,6 @@ textarea.form-input {
 select option {
   background: #1e1e2e;
   color: #e2e8f0;
-}
-
-.mode-card-compact {
-  max-height: 200px;
-  display: flex;
-  flex-direction: column;
-}
-
-.mode-card-compact .card-title {
-  flex-shrink: 0;
-}
-
-.mode-log-compact {
-  max-height: 140px;
-  overflow-y: auto;
 }
 
 .object-list {

@@ -755,7 +755,7 @@ app.whenReady().then(async () => {
     if (typeof input?.autoReply === 'boolean') updated.autoReply = input.autoReply
 
     const nextModes = allModes.map((m, i) => (i === index ? updated : m))
-    settingsStore.set({ ...settings, modes: nextModes.filter((m) => !isSystemModeId(m.id)) } as any)
+    settingsStore.set({ ...settings, modes: nextModes } as any)
     return { success: true, mode: updated }
   })
 
@@ -781,12 +781,8 @@ app.whenReady().then(async () => {
 
     mode.enabled = !!enabled
     mode.updatedAt = Date.now()
-    const nextModes = allModes.filter((m) => !isSystemModeId(m.id))
-    const existingCustom = nextModes.findIndex((m) => m.id === id)
-    if (existingCustom >= 0) nextModes[existingCustom] = mode
-    else nextModes.push(mode)
 
-    settingsStore.set({ ...settings, modes: nextModes } as any)
+    settingsStore.set({ ...settings, modes: allModes } as any)
     return { success: true, mode }
   })
 
@@ -817,12 +813,8 @@ app.whenReady().then(async () => {
 
     targetMode.specificObjects = [...(targetMode.specificObjects || []), newObject]
     targetMode.updatedAt = Date.now()
-    const nextModes = allModes.filter((m) => !isSystemModeId(m.id))
-    const existingIdx = nextModes.findIndex((m) => m.id === targetModeId)
-    if (existingIdx >= 0) nextModes[existingIdx] = targetMode
-    else nextModes.push(targetMode)
 
-    settingsStore.set({ ...settings, modes: nextModes } as any)
+    settingsStore.set({ ...settings, modes: allModes } as any)
     return { success: true, object: newObject, modeId: targetModeId }
   })
 
@@ -839,17 +831,21 @@ app.whenReady().then(async () => {
     if (mode.specificObjects.length === prevLen) return { success: false, error: '对象不存在' }
 
     mode.updatedAt = Date.now()
-    const nextModes = allModes.filter((m) => !isSystemModeId(m.id))
-    const existingIdx = nextModes.findIndex((m) => m.id === modeId)
-    if (existingIdx >= 0) nextModes[existingIdx] = mode
-    else nextModes.push(mode)
 
-    settingsStore.set({ ...settings, modes: nextModes } as any)
+    settingsStore.set({ ...settings, modes: allModes } as any)
     return { success: true }
   })
   ipcMain.handle('memory:open', async () => {
     createMemoryWindow()
     return { success: true }
+  })
+
+  ipcMain.on('mode:changed', () => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('mode:changed')
+      }
+    }
   })
 
   ipcMain.handle('trace:listSessions', async () => {
@@ -1700,12 +1696,33 @@ function ensureSystemModes(customModes: ReplyMode[]): ReplyMode[] {
     ? customModes.filter((m) => m && typeof m === 'object' && typeof m.id === 'string' && !isSystemModeId(m.id))
     : []
 
-  return [...systemModes, ...custom]
+  const persistedSystem = Array.isArray(customModes)
+    ? customModes.filter((m) => m && typeof m === 'object' && isSystemModeId(m.id))
+    : []
+
+  const mergedSystemModes = systemModes.map((base) => {
+    const persisted = persistedSystem.find((p) => p.id === base.id)
+    if (persisted) {
+      return {
+        ...base,
+        enabled: typeof persisted.enabled === 'boolean' ? persisted.enabled : base.enabled,
+        specificObjects: Array.isArray(persisted.specificObjects) ? persisted.specificObjects : [],
+        autoReply: typeof persisted.autoReply === 'boolean' ? persisted.autoReply : base.autoReply,
+        unifiedPrefix: typeof persisted.unifiedPrefix === 'string' ? persisted.unifiedPrefix : base.unifiedPrefix,
+        prompt: typeof persisted.prompt === 'string' && persisted.prompt ? persisted.prompt : base.prompt,
+        name: typeof persisted.name === 'string' && persisted.name ? persisted.name : base.name,
+        sentimentEnabled: typeof persisted.sentimentEnabled === 'boolean' ? persisted.sentimentEnabled : base.sentimentEnabled
+      }
+    }
+    return base
+  })
+
+  return [...mergedSystemModes, ...custom]
 }
 
 function normalizeModes(raw: unknown): ReplyMode[] {
   if (!Array.isArray(raw)) return []
-  return raw.filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && m.id && !isSystemModeId(m.id)) as ReplyMode[]
+  return raw.filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && m.id) as ReplyMode[]
 }
 
 function withSchemaDefaults(

@@ -10,7 +10,7 @@ interface LogEntry {
 }
 
 type EngineStatus = 'idle' | 'running' | 'error'
-type SettingsSection = 'base' | 'model' | 'mode' | 'agent'
+type SettingsSection = 'base' | 'model' | 'training' | 'mode' | 'agent'
 type AppType = 'wechat' | 'wework' | 'dingtalk' | 'lark' | 'slack' | 'telegram' | 'generic'
 
 type CaptureStrategy = 'auto' | 'vlm' | 'box-select'
@@ -200,7 +200,7 @@ const BUILTIN_PROVIDER_CATALOG: ProviderCatalogItem[] = [
 ]
 
 const PlayIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor">
+  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
     <path d="M8 5.14v14l11-7-11-7z" />
   </svg>
 )
@@ -346,14 +346,14 @@ function App() {
             onClick={() => window.electron?.invoke('settings:open')}
             title="设置"
           >
-            <GearIcon /> 设置
+            <GearIcon />
           </button>
           <button
             className="main-sidebar-item main-sidebar-bottom-btn"
             onClick={() => window.electron?.invoke('memory:open')}
             title="工作记忆"
           >
-            <MemoryIcon /> 记忆
+            <MemoryIcon />
           </button>
         </div>
       </aside>
@@ -503,7 +503,7 @@ function ModeSubInterface({
               <StopIcon /> 停止
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={handleStart}>
+            <button className="btn btn-primary" onClick={handleStart} style={{ minWidth: 100, height: 28 }}>
               <PlayIcon /> 启动
             </button>
           )}
@@ -557,9 +557,24 @@ function ModeSubInterface({
         )}
       </div>
 
-      <div className="card mode-card-compact">
+      <div className="card">
+        <div className="card-title">推荐回复</div>
+        <textarea
+          className="form-input recommended-reply"
+          value={recommendedReply}
+          onChange={(e) => setRecommendedReply(e.target.value)}
+          placeholder="AI 生成的推荐回复将显示在这里"
+          rows={3}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
+          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handlePaste}>一键粘贴</button>
+          <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>一键回复</button>
+        </div>
+      </div>
+
+      <div className="card">
         <div className="card-title">运行日志</div>
-        <div className="message-log mode-log-compact" ref={logRef}>
+        <div className="message-log" ref={logRef}>
           {logs.length === 0 ? (
             <div className="message-log-empty">暂无日志</div>
           ) : (
@@ -571,21 +586,6 @@ function ModeSubInterface({
               </div>
             ))
           )}
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-title">推荐回复</div>
-        <textarea
-          className="form-input recommended-reply"
-          value={recommendedReply}
-          onChange={(e) => setRecommendedReply(e.target.value)}
-          placeholder="AI 生成的推荐回复将显示在这里"
-          rows={3}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handlePaste}>一键粘贴</button>
-          <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>一键回复</button>
         </div>
       </div>
 
@@ -764,6 +764,12 @@ function SettingsWindow(): React.JSX.Element {
           模型配置
         </button>
         <button
+          className={`settings-nav-item ${section === 'training' ? 'active' : ''}`}
+          onClick={() => setSection('training')}
+        >
+          模型训练
+        </button>
+        <button
           className={`settings-nav-item ${section === 'mode' ? 'active' : ''}`}
           onClick={() => setSection('mode')}
         >
@@ -778,17 +784,13 @@ function SettingsWindow(): React.JSX.Element {
       </aside>
 
       <main className="settings-main">
-        {section === 'base' ? <SettingsPanel /> : section === 'model' ? <ModelConfigPanel /> : section === 'mode' ? <ModeManagePanel /> : <AgentPanel />}
+        {section === 'base' ? <SettingsPanel /> : section === 'model' ? <ModelConfigPanel /> : section === 'training' ? <TrainingPanel /> : section === 'mode' ? <ModeManagePanel /> : <AgentPanel />}
       </main>
     </div>
   )
 }
 
 function SettingsPanel() {
-  const [testing, setTesting] = useState(false)
-  const [training, setTraining] = useState(false)
-  const [trainLog, setTrainLog] = useState<{ time: string; message: string }[]>([])
-  const trainLogRef = useRef<HTMLDivElement>(null)
   const [models, setModels] = useState<ModelConfig[]>([])
   const [globalVisionModelId, setGlobalVisionModelId] = useState('')
   const [globalReplyModelId, setGlobalReplyModelId] = useState('')
@@ -801,35 +803,13 @@ function SettingsPanel() {
         setGlobalVisionModelId(settings.globalVisionModelId || '')
         setGlobalReplyModelId(settings.globalReplyModelId || '')
       }
-      const status = await window.electron?.invoke('train:status')
-      if (status?.running) setTraining(true)
     }
 
     void load()
   }, [])
 
-  useEffect(() => {
-    const handler = (data: any) => {
-      const msg = data?.message || JSON.stringify(data)
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false })
-      setTrainLog((prev) => [...prev, { time, message: msg }])
-      if (data?.type === 'exited' || data?.type === 'completed' || data?.type === 'error') {
-        setTraining(false)
-      }
-    }
-    const cleanup = window.electron?.on('train:event', handler)
-    return () => { cleanup?.() }
-  }, [])
-
-  useEffect(() => {
-    if (trainLogRef.current) {
-      trainLogRef.current.scrollTop = trainLogRef.current.scrollHeight
-    }
-  }, [trainLog])
-
   const handleTestConnection = useCallback(async (modelId: string) => {
     if (!modelId) return
-    setTesting(true)
     try {
       const result = await window.electron?.invoke('model:testConnection', modelId)
       if (result?.success) {
@@ -839,8 +819,6 @@ function SettingsPanel() {
       }
     } catch (e: any) {
       showToast(`连接测试失败: ${e.message}`, 'error')
-    } finally {
-      setTesting(false)
     }
   }, [])
 
@@ -899,10 +877,54 @@ function SettingsPanel() {
           <button
             className="btn btn-secondary"
             onClick={() => handleTestConnection(globalVisionModelId)}
-            disabled={!globalVisionModelId || testing}
+            disabled={!globalVisionModelId}
           >
-            {testing ? '测试中...' : '测试连接'}
+            测试连接
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TrainingPanel(): React.JSX.Element {
+  const [training, setTraining] = useState(false)
+  const [trainLog, setTrainLog] = useState<{ time: string; message: string }[]>([])
+  const trainLogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (data: any) => {
+      const msg = data?.message || JSON.stringify(data)
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false })
+      setTrainLog((prev) => [...prev, { time, message: msg }])
+      if (data?.type === 'exited' || data?.type === 'completed' || data?.type === 'error') {
+        setTraining(false)
+      }
+    }
+    const cleanup = window.electron?.on('train:event', handler)
+    return () => { cleanup?.() }
+  }, [])
+
+  useEffect(() => {
+    if (trainLogRef.current) {
+      trainLogRef.current.scrollTop = trainLogRef.current.scrollHeight
+    }
+  }, [trainLog])
+
+  useEffect(() => {
+    const check = async () => {
+      const status = await window.electron?.invoke('train:status')
+      if (status?.running) setTraining(true)
+    }
+    void check()
+  }, [])
+
+  return (
+    <div className="settings-page">
+      <div className="settings-page-header">
+        <div>
+          <h1>模型训练</h1>
+          <p>训练和管理 AI 模型。</p>
         </div>
       </div>
 
@@ -1265,41 +1287,43 @@ function ModeManagePanel(): React.JSX.Element {
         <div className="card-title">模式列表</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {modes.map((mode) => (
-            <div key={mode.id} className="provider-card" style={{ cursor: 'pointer' }} onClick={() => setEditingMode(mode)}>
+            <div key={mode.id} className="provider-card" style={{ cursor: 'pointer', height: 'auto' }} onClick={() => setEditingMode(mode)}>
               <div className="provider-card-top">
                 <span className="provider-name">{mode.name}</span>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  {mode.source === 'system' && <span className="mode-info-badge">系统</span>}
+                  {mode.source === 'system' && <span className="mode-info-badge mode-badge-system">系统</span>}
                   <span className={`mode-status ${mode.enabled ? 'running' : 'stopped'}`} style={{ fontSize: 11 }}>
                     {mode.enabled ? '已启用' : '已禁用'}
                   </span>
                 </div>
               </div>
-              <div className="provider-desc" style={{ maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {mode.prompt.slice(0, 80)}{mode.prompt.length > 80 ? '...' : ''}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => handleToggleEnabled(mode.id, !mode.enabled)}
-                >
-                  {mode.enabled ? '禁用' : '启用'}
-                </button>
-                {mode.source === 'custom' && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 7 }} onClick={(e) => e.stopPropagation()}>
+                <div className="provider-desc" style={{ flex: 1, maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {mode.prompt.slice(0, 80)}{mode.prompt.length > 80 ? '...' : ''}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
                   <button
                     className="btn btn-secondary btn-sm"
-                    style={{ color: '#ef4444' }}
-                    onClick={() => handleDelete(mode.id)}
+                    onClick={() => handleToggleEnabled(mode.id, !mode.enabled)}
                   >
-                    删除
+                    {mode.enabled ? '禁用' : '启用'}
                   </button>
-                )}
-                {mode.specificObjects.length > 0 && (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {mode.specificObjects.length} 个特定对象
-                  </span>
-                )}
+                  {mode.source === 'custom' && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ color: '#ef4444' }}
+                      onClick={() => handleDelete(mode.id)}
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
               </div>
+              {mode.specificObjects.length > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
+                  {mode.specificObjects.length} 个特定对象
+                </span>
+              )}
             </div>
           ))}
         </div>
