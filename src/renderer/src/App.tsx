@@ -11,7 +11,7 @@ interface LogEntry {
 }
 
 type EngineStatus = 'idle' | 'running' | 'error'
-type SettingsSection = 'base' | 'agent'
+type SettingsSection = 'base' | 'model' | 'agent'
 type AppType = 'wechat' | 'wework' | 'dingtalk' | 'lark' | 'slack' | 'telegram' | 'generic'
 
 type CaptureStrategy = 'auto' | 'vlm' | 'box-select'
@@ -136,7 +136,27 @@ interface AppSettings {
   }
   defaultCaptureStrategy: CaptureStrategy
   capture: Partial<Record<AppType, PerAppCapture>>
+  models: ModelConfig[]
+  globalVisionModelId: string
+  globalReplyModelId: string
 }
+
+interface ModelConfig {
+  id: string
+  name: string
+  provider: string
+  modelName: string
+  apiKey: string
+  baseURL: string
+  createdAt: number
+}
+
+const PROVIDER_PRESETS = [
+  { id: 'volcengine-ark', name: '火山方舟 (Volcengine Ark)', defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-0-lite-260215' },
+  { id: 'openai', name: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
+  { id: 'deepseek', name: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
+  { id: 'custom', name: '自定义', defaultBaseURL: '', defaultModel: '' }
+]
 
 const BUILTIN_PROVIDER_CATALOG: ProviderCatalogItem[] = [
   {
@@ -647,6 +667,12 @@ function SettingsWindow(): React.JSX.Element {
           基础配置
         </button>
         <button
+          className={`settings-nav-item ${section === 'model' ? 'active' : ''}`}
+          onClick={() => setSection('model')}
+        >
+          模型配置
+        </button>
+        <button
           className={`settings-nav-item ${section === 'agent' ? 'active' : ''}`}
           onClick={() => setSection('agent')}
         >
@@ -655,7 +681,7 @@ function SettingsWindow(): React.JSX.Element {
       </aside>
 
       <main className="settings-main">
-        {section === 'base' ? <SettingsPanel /> : <AgentPanel />}
+        {section === 'base' ? <SettingsPanel /> : section === 'model' ? <ModelConfigPanel /> : <AgentPanel />}
       </main>
     </div>
   )
@@ -669,6 +695,9 @@ function SettingsPanel() {
   const [training, setTraining] = useState(false)
   const [trainLog, setTrainLog] = useState<{ time: string; message: string }[]>([])
   const trainLogRef = useRef<HTMLDivElement>(null)
+  const [models, setModels] = useState<ModelConfig[]>([])
+  const [globalVisionModelId, setGlobalVisionModelId] = useState('')
+  const [globalReplyModelId, setGlobalReplyModelId] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -677,6 +706,9 @@ function SettingsPanel() {
         setVisionApiKey(settings.vision?.apiKey || '')
         setVisionModel(settings.vision?.model || '')
         setVisionBaseUrl(settings.vision?.baseURL || '')
+        setModels(settings.models || [])
+        setGlobalVisionModelId(settings.globalVisionModelId || '')
+        setGlobalReplyModelId(settings.globalReplyModelId || '')
       }
       const status = await window.electron?.invoke('train:status')
       if (status?.running) setTraining(true)
@@ -799,6 +831,59 @@ function SettingsPanel() {
       </div>
 
       <div className="card base-settings-card">
+        <div className="card-title">全局模型选择</div>
+        <div className="form-hint" style={{ marginBottom: 12 }}>
+          选择用于视觉检测和回复生成的模型。如需添加新模型，请前往"模型配置"页面。
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">全局视觉模型</label>
+          <select
+            className="form-input"
+            value={globalVisionModelId}
+            onChange={async (e) => {
+              const id = e.target.value
+              setGlobalVisionModelId(id)
+              await window.electron?.invoke('settings:set', { globalVisionModelId: id })
+              if (id) {
+                const selected = models.find((m) => m.id === id)
+                if (selected) {
+                  setVisionApiKey(selected.apiKey)
+                  setVisionModel(selected.modelName)
+                  setVisionBaseUrl(selected.baseURL)
+                }
+              }
+            }}
+          >
+            <option value="">使用下方视觉配置</option>
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
+            ))}
+          </select>
+          <div className="form-hint">用于 VLM 布局检测、红点检测、对象识别</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">全局回复模型</label>
+          <select
+            className="form-input"
+            value={globalReplyModelId}
+            onChange={async (e) => {
+              const id = e.target.value
+              setGlobalReplyModelId(id)
+              await window.electron?.invoke('settings:set', { globalReplyModelId: id })
+            }}
+          >
+            <option value="">使用视觉模型</option>
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
+            ))}
+          </select>
+          <div className="form-hint">用于 AI 回复生成，未选择时使用视觉模型</div>
+        </div>
+      </div>
+
+      <div className="card base-settings-card">
         <div className="card-title">情感模型训练</div>
         <div className="form-hint" style={{ marginBottom: 12 }}>
           训练基于 BERT 的抑郁倾向分类模型。训练数据来自 Kaggle 中文抑郁数据集，训练完成后自动保存为 best.pt。
@@ -841,6 +926,233 @@ function SettingsPanel() {
                 </div>
               ))
             : <div className="message-log-empty">暂无训练日志</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModelConfigPanel(): React.JSX.Element {
+  const [models, setModels] = useState<ModelConfig[]>([])
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingModel, setEditingModel] = useState<ModelConfig | null>(null)
+  const [filterProvider, setFilterProvider] = useState('')
+  const [testingId, setTestingId] = useState<string | null>(null)
+
+  const loadModels = useCallback(async () => {
+    const list = (await window.electron?.invoke('model:list')) as ModelConfig[]
+    setModels(list || [])
+  }, [])
+
+  useEffect(() => {
+    void loadModels()
+  }, [loadModels])
+
+  const handleDelete = useCallback(async (id: string) => {
+    const result = await window.electron?.invoke('model:delete', id)
+    if (result?.success) {
+      setModels((prev) => prev.filter((m) => m.id !== id))
+      showToast('模型已删除', 'success')
+    } else {
+      showToast(result?.error || '删除失败', 'error')
+    }
+  }, [])
+
+  const handleTest = useCallback(async (id: string) => {
+    setTestingId(id)
+    try {
+      const result = await window.electron?.invoke('model:testConnection', id)
+      if (result?.success) {
+        showToast('连接测试成功', 'success')
+      } else {
+        showToast(`连接测试失败: ${result?.error || ''}`, 'error')
+      }
+    } catch (e: any) {
+      showToast(`连接测试失败: ${e.message}`, 'error')
+    } finally {
+      setTestingId(null)
+    }
+  }, [])
+
+  const filteredModels = filterProvider
+    ? models.filter((m) => m.provider === filterProvider)
+    : models
+
+  return (
+    <div className="settings-page slide-up">
+      <div className="settings-page-header">
+        <div>
+          <h1>模型配置</h1>
+          <p>管理不同供应商的 AI 模型，配置 API Key 和连接参数。</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <select
+            className="form-input"
+            value={filterProvider}
+            onChange={(e) => setFilterProvider(e.target.value)}
+            style={{ maxWidth: 200 }}
+          >
+            <option value="">全部供应商</option>
+            {PROVIDER_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <button
+            className="btn btn-primary"
+            onClick={() => { setEditingModel(null); setShowAddModal(true) }}
+          >
+            + 添加模型
+          </button>
+        </div>
+
+        {filteredModels.length === 0 ? (
+          <div className="message-log-empty">
+            {models.length === 0 ? '暂无模型配置，点击"添加模型"开始' : '当前筛选条件下无模型'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filteredModels.map((model) => {
+              const preset = PROVIDER_PRESETS.find((p) => p.id === model.provider)
+              return (
+                <div key={model.id} className="provider-card" style={{ cursor: 'default' }}>
+                  <div className="provider-card-top">
+                    <span className="provider-name">{model.name}</span>
+                    <span className="provider-version" style={{ color: '#94a3b8' }}>
+                      {preset?.name || model.provider}
+                    </span>
+                  </div>
+                  <div className="provider-desc">
+                    {model.modelName} · {model.baseURL || '默认端点'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, padding: '4px 10px' }}
+                      onClick={() => { setEditingModel(model); setShowAddModal(true) }}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, padding: '4px 10px' }}
+                      disabled={testingId === model.id}
+                      onClick={() => handleTest(model.id)}
+                    >
+                      {testingId === model.id ? '测试中...' : '测试连接'}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 12, padding: '4px 10px', color: '#ef4444' }}
+                      onClick={() => handleDelete(model.id)}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {showAddModal && (
+        <ModelEditModal
+          model={editingModel}
+          onClose={() => { setShowAddModal(false); setEditingModel(null) }}
+          onSaved={() => { loadModels(); setShowAddModal(false); setEditingModel(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModelEditModal({
+  model,
+  onClose,
+  onSaved
+}: {
+  model: ModelConfig | null
+  onClose: () => void
+  onSaved: () => void
+}): React.JSX.Element {
+  const isEdit = model !== null
+  const [name, setName] = useState(model?.name || '')
+  const [provider, setProvider] = useState(model?.provider || 'volcengine-ark')
+  const [modelName, setModelName] = useState(model?.modelName || '')
+  const [apiKey, setApiKey] = useState(model?.apiKey || '')
+  const [baseURL, setBaseURL] = useState(model?.baseURL || '')
+
+  useEffect(() => {
+    if (!isEdit) {
+      const preset = PROVIDER_PRESETS.find((p) => p.id === provider)
+      if (preset) {
+        setModelName(preset.defaultModel)
+        setBaseURL(preset.defaultBaseURL)
+      }
+    }
+  }, [provider, isEdit])
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) { showToast('模型名称不能为空', 'error'); return }
+    if (!modelName.trim()) { showToast('模型标识不能为空', 'error'); return }
+    if (!apiKey.trim()) { showToast('API Key 不能为空', 'error'); return }
+
+    const input = { name: name.trim(), provider, modelName: modelName.trim(), apiKey, baseURL }
+    const result = isEdit
+      ? await window.electron?.invoke('model:update', model!.id, input)
+      : await window.electron?.invoke('model:create', input)
+
+    if (result?.success) {
+      showToast(isEdit ? '模型已更新' : '模型已添加', 'success')
+      onSaved()
+    } else {
+      showToast(result?.error || '操作失败', 'error')
+    }
+  }, [name, provider, modelName, apiKey, baseURL, isEdit, model, onSaved])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>{isEdit ? '编辑模型' : '添加模型'}</h2>
+
+        <div className="form-group">
+          <label className="form-label">供应商 <span className="required-mark">*</span></label>
+          <select className="form-input" value={provider} onChange={(e) => setProvider(e.target.value)} disabled={isEdit}>
+            {PROVIDER_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">模型名称 <span className="required-mark">*</span></label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的豆包模型" />
+          <div className="form-hint">用于在界面中识别此模型配置</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">模型标识 <span className="required-mark">*</span></label>
+          <input className="form-input" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="例如：doubao-seed-2-0-lite-260215" />
+          <div className="form-hint">API 调用时使用的模型 ID</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">API Key <span className="required-mark">*</span></label>
+          <input className="form-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="输入 API Key" autoComplete="off" />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Base URL</label>
+          <input className="form-input" value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
+          <div className="form-hint">API 端点地址，选择供应商后会自动填充</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" onClick={handleSave}>{isEdit ? '保存' : '添加'}</button>
         </div>
       </div>
     </div>

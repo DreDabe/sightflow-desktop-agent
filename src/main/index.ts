@@ -43,7 +43,9 @@ import { TraceStepInput } from '../core/trace/trace-types'
 import { ExperienceStore, NewExperienceCard } from '../core/memory/experience-store'
 import { induceCardsFromSession } from '../core/memory/learn-from-session'
 import { SentimentClassifier, ensurePythonDeps, checkPythonInstalled, ensureScriptsCopied } from '../core/sentiment/classifier'
+import { ModelConfig, PROVIDER_PRESETS } from '../core/types'
 import { spawn as spawnChild, ChildProcess } from 'child_process'
+import { randomUUID } from 'crypto'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 
 const FIXED_ARK_MODEL = 'doubao-seed-2-0-lite-260215'
@@ -67,10 +69,11 @@ interface AppSettings {
     installed: InstalledProviderInfo | null
     config: Record<string, any>
   }
-  // 默认抓取策略（仅当 appType 没有 per-app 覆盖时生效）
   defaultCaptureStrategy: CaptureStrategy
-  // 每个 appType 独立保存的策略 + 框选区域
   capture: Partial<Record<AppType, PerAppCapture>>
+  models: ModelConfig[]
+  globalVisionModelId: string
+  globalReplyModelId: string
 }
 
 type ProviderConfigFieldType = 'text' | 'password' | 'url' | 'select' | 'textarea'
@@ -136,7 +139,10 @@ const settingsStore = new StoreClass({
       config: {}
     },
     defaultCaptureStrategy: 'auto',
-    capture: {}
+    capture: {},
+    models: [],
+    globalVisionModelId: '',
+    globalReplyModelId: ''
   }
 })
 
@@ -496,7 +502,10 @@ app.whenReady().then(async () => {
       capture: {
         ...current.capture,
         ...(data.capture || {})
-      }
+      },
+      models: Array.isArray(data.models) ? data.models : current.models,
+      globalVisionModelId: typeof data.globalVisionModelId === 'string' ? data.globalVisionModelId : current.globalVisionModelId,
+      globalReplyModelId: typeof data.globalReplyModelId === 'string' ? data.globalReplyModelId : current.globalReplyModelId
     } satisfies AppSettings
 
     settingsStore.set(next as any)
@@ -577,6 +586,105 @@ app.whenReady().then(async () => {
   ipcMain.handle('settings:open', async () => {
     createSettingsWindow()
     return { success: true }
+  })
+
+  // ── 模型配置 CRUD ──
+  ipcMain.handle('model:list', async () => {
+    const settings = normalizeSettings(settingsStore.store)
+    return settings.models
+  })
+
+  ipcMain.handle('model:create', async (_event, input: Partial<ModelConfig>) => {
+    const name = typeof input?.name === 'string' ? input.name.trim() : ''
+    const provider = typeof input?.provider === 'string' ? input.provider : 'custom'
+    const modelName = typeof input?.modelName === 'string' ? input.modelName.trim() : ''
+    const apiKey = typeof input?.apiKey === 'string' ? input.apiKey : ''
+    const baseURL = typeof input?.baseURL === 'string' ? input.baseURL : ''
+
+    if (!name) return { success: false, error: '模型名称不能为空' }
+    if (!modelName) return { success: false, error: '模型标识不能为空' }
+    if (!apiKey) return { success: false, error: 'API Key 不能为空' }
+
+    const settings = normalizeSettings(settingsStore.store)
+    const duplicate = settings.models.find((m) => m.name === name)
+    if (duplicate) return { success: false, error: '模型名称已存在' }
+
+    const newModel: ModelConfig = {
+      id: randomUUID(),
+      name,
+      provider,
+      modelName,
+      apiKey,
+      baseURL,
+      createdAt: Date.now()
+    }
+
+    const nextModels = [...settings.models, newModel]
+    settingsStore.set({
+      ...settings,
+      models: nextModels
+    } as any)
+    return { success: true, model: newModel }
+  })
+
+  ipcMain.handle('model:update', async (_event, id: string, input: Partial<ModelConfig>) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: '无效的模型 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const index = settings.models.findIndex((m) => m.id === id)
+    if (index === -1) return { success: false, error: '模型不存在' }
+
+    const name = typeof input?.name === 'string' ? input.name.trim() : ''
+    if (name) {
+      const duplicate = settings.models.find((m) => m.name === name && m.id !== id)
+      if (duplicate) return { success: false, error: '模型名称已存在' }
+    }
+
+    const updated = { ...settings.models[index] }
+    if (name) updated.name = name
+    if (typeof input?.provider === 'string') updated.provider = input.provider
+    if (typeof input?.modelName === 'string' && input.modelName.trim()) updated.modelName = input.modelName.trim()
+    if (typeof input?.apiKey === 'string') updated.apiKey = input.apiKey
+    if (typeof input?.baseURL === 'string') updated.baseURL = input.baseURL
+
+    const nextModels = [...settings.models]
+    nextModels[index] = updated
+    settingsStore.set({
+      ...settings,
+      models: nextModels
+    } as any)
+    return { success: true, model: updated }
+  })
+
+  ipcMain.handle('model:delete', async (_event, id: string) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: '无效的模型 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const nextModels = settings.models.filter((m) => m.id !== id)
+    if (nextModels.length === settings.models.length) return { success: false, error: '模型不存在' }
+
+    const updates: Partial<AppSettings> = { models: nextModels }
+    if (settings.globalVisionModelId === id) updates.globalVisionModelId = ''
+    if (settings.globalReplyModelId === id) updates.globalReplyModelId = ''
+
+    settingsStore.set({
+      ...settings,
+      ...updates
+    } as any)
+    return { success: true }
+  })
+
+  ipcMain.handle('model:testConnection', async (_event, id: string) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: '无效的模型 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const model = settings.models.find((m) => m.id === id)
+    if (!model) return { success: false, error: '模型不存在' }
+    if (!model.apiKey) return { success: false, error: 'API Key 不能为空' }
+
+    const client = new AIClient({
+      apiKey: model.apiKey,
+      model: model.modelName,
+      baseURL: model.baseURL || FIXED_ARK_BASE_URL
+    })
+    return client.testConnection()
   })
 
   // ── 工作记忆：轨迹查询 / 回放 ──
@@ -947,26 +1055,30 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
     const settings = normalizeSettings(rawConfig || settingsStore.store)
     const appType: AppType = settings.appType || 'wechat'
     const startupStrategy = resolveSettingsStrategy(appType, settings)
+
+    const visionModel = resolveModelConfig(settings, settings.globalVisionModelId, 'vision')
+    const replyModel = resolveModelConfig(settings, settings.globalReplyModelId, 'reply')
+
     const providerNeedsVisionKey =
       !settings.chatProvider.installed ||
       settings.chatProvider.installed.id === BUILTIN_DOUBAO_PROVIDER_ID
     const needsVisionKey = startupStrategy === 'vlm' || providerNeedsVisionKey
 
-    if (needsVisionKey && !settings.vision.apiKey) {
+    if (needsVisionKey && !visionModel.apiKey) {
       return { ok: false, reason: 'no_vision_key', message: '请先填写视觉接口密钥' }
     }
 
-    // 没有自定义 provider → 走内置 doubao，使用视觉密钥
     let provider
     if (!settings.chatProvider.installed) {
       const loaded = await loadBuiltinDoubaoProvider({
         ...settings.chatProvider.config,
-        apiKey: settings.vision.apiKey
+        apiKey: visionModel.apiKey,
+        model: replyModel.modelName || settings.chatProvider.config?.model,
+        baseURL: replyModel.baseURL || settings.chatProvider.config?.baseURL
       })
       provider = loaded.provider
     } else {
       const installedManifest = await getInstalledProviderManifest(settings.chatProvider.installed)
-      // doubao（无论是用户主动装的还是内置的）apiKey 由视觉密钥共享提供，不强校验
       const isDoubao = settings.chatProvider.installed.id === BUILTIN_DOUBAO_PROVIDER_ID
       const required = (installedManifest?.configSchema?.required || []).filter(
         (key) => !(isDoubao && key === 'apiKey')
@@ -984,7 +1096,7 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       }
 
       const effectiveConfig = isDoubao
-        ? { ...settings.chatProvider.config, apiKey: settings.vision.apiKey }
+        ? { ...settings.chatProvider.config, apiKey: visionModel.apiKey, model: replyModel.modelName || settings.chatProvider.config?.model, baseURL: replyModel.baseURL || settings.chatProvider.config?.baseURL }
         : settings.chatProvider.config
 
       const loaded = await loadInstalledProvider(settings.chatProvider.installed, effectiveConfig)
@@ -1001,7 +1113,7 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
     let device: DesktopDevice
     let strategy: CaptureStrategy
     try {
-      const built = await buildDevice(appType, settings, settings.vision.apiKey, log)
+      const built = await buildDevice(appType, settings, visionModel.apiKey, log)
       device = built.device
       strategy = built.strategy
     } catch (err: any) {
@@ -1014,26 +1126,23 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
     log('thinking', `已选用抓取策略：${strategy}`)
     runtimeDevice = device
 
-    // ── 工作记忆：本次执行的所有步骤落成 work-trace 会话 ──
     const recorder = getTraceRecorder()
     recorder.startSession({
       appType,
       engineVersion: app.getVersion(),
       providerId: settings.chatProvider.installed?.id ?? BUILTIN_DOUBAO_PROVIDER_ID,
-      model: settings.chatProvider.config?.model || settings.vision.model
+      model: replyModel.modelName || settings.chatProvider.config?.model || visionModel.modelName
     })
 
     const onTrace = (input: TraceStepInput): void => {
       const step = recorder.record(input)
       if (!step) return
 
-      // 继承闭环：带经验引用的回复成功发送 → 卡片 used/success 计数
       const refs = step.reasoning?.memoryRefs
       if (step.phase === 'act' && step.action?.kind === 'send' && refs?.length) {
         getExperienceStore().recordUsage(refs, step.outcome?.status === 'ok')
       }
 
-      // 实时推给工作记忆窗口
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send('trace:step', { sessionId: step.sessionId, step })
@@ -1048,9 +1157,9 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
 
     try {
       const textExtractClient = new AIClient({
-        apiKey: settings.vision.apiKey,
-        model: settings.vision.model,
-        baseURL: settings.vision.baseURL
+        apiKey: visionModel.apiKey,
+        model: visionModel.modelName,
+        baseURL: visionModel.baseURL
       })
 
       sentimentClassifier = new SentimentClassifier()
@@ -1097,6 +1206,24 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       reason: 'engine_failed',
       message: error?.message || String(error)
     }
+  }
+}
+
+function resolveModelConfig(
+  settings: AppSettings,
+  globalModelId: string,
+  role: 'vision' | 'reply'
+): { apiKey: string; modelName: string; baseURL: string } {
+  if (globalModelId) {
+    const found = settings.models.find((m) => m.id === globalModelId)
+    if (found) {
+      return { apiKey: found.apiKey, modelName: found.modelName, baseURL: found.baseURL }
+    }
+  }
+  return {
+    apiKey: settings.vision.apiKey,
+    modelName: settings.vision.model,
+    baseURL: settings.vision.baseURL
   }
 }
 
@@ -1299,7 +1426,6 @@ function normalizeSettings(raw: any): AppSettings {
       ? { ...raw.chatProvider.config }
       : {}
 
-  // Keep arbitrary provider config keys, and only backfill legacy volcengine fields for old persisted settings.
   if (rawProviderConfig.apiKey === undefined && oldApiKey) {
     rawProviderConfig.apiKey = oldApiKey
   }
@@ -1310,22 +1436,50 @@ function normalizeSettings(raw: any): AppSettings {
     rawProviderConfig.systemPrompt = oldSystemPrompt
   }
 
+  const vision = {
+    apiKey: raw?.vision?.apiKey || oldApiKey || '',
+    model: raw?.vision?.model || FIXED_ARK_MODEL,
+    baseURL: raw?.vision?.baseURL || FIXED_ARK_BASE_URL
+  }
+
+  const models = normalizeModels(raw?.models, vision)
+
   return {
     locale: raw?.locale === 'en' ? 'en' : 'zh',
     appType: coerceAppType(raw?.appType),
-    vision: {
-      apiKey: raw?.vision?.apiKey || oldApiKey || '',
-      model: raw?.vision?.model || FIXED_ARK_MODEL,
-      baseURL: raw?.vision?.baseURL || FIXED_ARK_BASE_URL
-    },
+    vision,
     chatProvider: {
       manifestUrl: raw?.chatProvider?.manifestUrl || raw?.providerManifestUrl || '',
       installed: raw?.chatProvider?.installed || null,
       config: rawProviderConfig
     },
     defaultCaptureStrategy: coerceStrategy(raw?.defaultCaptureStrategy, 'auto'),
-    capture: normalizeCapture(raw?.capture)
+    capture: normalizeCapture(raw?.capture),
+    models,
+    globalVisionModelId: typeof raw?.globalVisionModelId === 'string' ? raw.globalVisionModelId : '',
+    globalReplyModelId: typeof raw?.globalReplyModelId === 'string' ? raw.globalReplyModelId : ''
   }
+}
+
+function normalizeModels(raw: unknown, fallbackVision: { apiKey: string; model: string; baseURL: string }): ModelConfig[] {
+  if (Array.isArray(raw)) {
+    const valid = raw.filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && m.id)
+    if (valid.length > 0) return valid as ModelConfig[]
+  }
+
+  if (fallbackVision.apiKey) {
+    return [{
+      id: 'default-vision',
+      name: '默认视觉模型',
+      provider: 'volcengine-ark',
+      modelName: fallbackVision.model,
+      apiKey: fallbackVision.apiKey,
+      baseURL: fallbackVision.baseURL,
+      createdAt: Date.now()
+    }]
+  }
+
+  return []
 }
 
 function withSchemaDefaults(

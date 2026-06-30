@@ -889,6 +889,29 @@ textarea.form-input {
   animation: slideUp 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* ─── Modal ─── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
 /* ─── Work Memory（工作记忆窗口） ─── */
 .memory-shell {
   display: grid;
