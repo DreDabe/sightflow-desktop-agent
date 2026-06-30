@@ -43,7 +43,7 @@ import { TraceStepInput } from '../core/trace/trace-types'
 import { ExperienceStore, NewExperienceCard } from '../core/memory/experience-store'
 import { induceCardsFromSession } from '../core/memory/learn-from-session'
 import { SentimentClassifier, ensurePythonDeps, checkPythonInstalled, ensureScriptsCopied } from '../core/sentiment/classifier'
-import { ModelConfig, PROVIDER_PRESETS } from '../core/types'
+import { ModelConfig, ReplyMode, SpecificObject } from '../core/types'
 import { spawn as spawnChild, ChildProcess } from 'child_process'
 import { randomUUID } from 'crypto'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
@@ -1371,7 +1371,7 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
 function resolveModelConfig(
   settings: AppSettings,
   globalModelId: string,
-  role: 'vision' | 'reply'
+  _role: 'vision' | 'reply'
 ): { apiKey: string; modelName: string; baseURL: string } {
   if (globalModelId) {
     const found = settings.models.find((m) => m.id === globalModelId)

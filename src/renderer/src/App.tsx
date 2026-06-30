@@ -43,33 +43,6 @@ const APP_TYPE_LABELS: Record<AppType, string> = {
   generic: '其他桌面应用'
 }
 
-const VLM_SUPPORTED_APPS: AppType[] = ['wechat', 'wework']
-
-function isVlmSupported(appType: AppType): boolean {
-  return VLM_SUPPORTED_APPS.includes(appType)
-}
-
-interface ProviderSchemaField {
-  type: 'string' | 'password' | 'select' | 'boolean'
-  title: string
-  default?: string | boolean
-  enum?: string[]
-}
-
-interface ProviderManifest {
-  apiVersion: 1
-  id: string
-  name: string
-  version: string
-  entry: string
-  capabilities: ['chat']
-  configSchema: {
-    type: 'object'
-    properties: Record<string, ProviderSchemaField>
-    required?: string[]
-  }
-}
-
 interface InstalledProviderInfo {
   id: string
   name: string
@@ -139,6 +112,9 @@ interface AppSettings {
   models: ModelConfig[]
   globalVisionModelId: string
   globalReplyModelId: string
+  modes: ReplyMode[]
+  globalDefaultModeId: string
+  globalAutoReply: boolean
 }
 
 interface SpecificObject {
@@ -690,19 +666,18 @@ function AddModeModal({
 
 function AddObjectModal({
   modeId,
-  modes,
   onClose,
   onSaved
 }: {
   modeId: string
-  modes: ReplyMode[]
+  modes?: ReplyMode[]
   onClose: () => void
   onSaved: (obj: SpecificObject) => void
 }): React.JSX.Element {
   const [name, setName] = useState('')
   const [title, setTitle] = useState('')
   const [relationship, setRelationship] = useState('')
-  const [targetModeId, setTargetModeId] = useState(modeId)
+  const [targetModeId] = useState(modeId)
   const [autoReply, setAutoReply] = useState<boolean | null>(null)
 
   const handleSave = useCallback(async () => {
@@ -755,350 +730,6 @@ function AddObjectModal({
           <button className="btn btn-primary" onClick={handleSave}>添加</button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function ControlPanel({
-  status,
-  setStatus
-}: {
-  status: EngineStatus
-  setStatus: (s: EngineStatus) => void
-}) {
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const logRef = useRef<HTMLDivElement>(null)
-
-  // 首屏目标应用 + 框选状态：直接读 / 写 settings，让用户上手第一步就能完成。
-  const [appType, setAppType] = useState<AppType>('wechat')
-  const [regions, setRegions] = useState<BoxRegions | null>(null)
-  const [openingWizard, setOpeningWizard] = useState(false)
-
-  const reloadRegionsForApp = useCallback(async (type: AppType) => {
-    const r = (await window.electron?.invoke('capture:getRegions', type)) as BoxRegions | null
-    setRegions(r ?? null)
-  }, [])
-
-  // 初次加载：读出当前 appType + 对应的框选区域
-  useEffect(() => {
-    void (async () => {
-      const settings = (await window.electron?.invoke('settings:getAll')) as
-        | AppSettings
-        | undefined
-      const initial = settings?.appType || 'wechat'
-      setAppType(initial)
-      await reloadRegionsForApp(initial)
-    })()
-  }, [reloadRegionsForApp])
-
-  // 监听 main 进程的"区域已更新"事件——比如向导刚跑完
-  useEffect(() => {
-    const cleanup = window.electron?.on(
-      'capture:regions-updated',
-      (data: { appType: AppType; regions: BoxRegions | null }) => {
-        if (data.appType === appType) setRegions(data.regions)
-      }
-    )
-    return cleanup
-  }, [appType])
-
-  const handleAppTypeChange = useCallback(
-    async (next: AppType) => {
-      if (status === 'running') return
-      setAppType(next)
-      await window.electron?.invoke('settings:set', { appType: next })
-      await window.electron?.invoke('engine:updateConfig', {
-        ...((await window.electron?.invoke('settings:getAll')) as AppSettings),
-        appType: next
-      })
-      await reloadRegionsForApp(next)
-    },
-    [reloadRegionsForApp, status]
-  )
-
-  const handleOpenWizard = useCallback(async () => {
-    if (status === 'running') return
-    setOpeningWizard(true)
-    try {
-      const result = (await window.electron?.invoke('capture:openSetupWizard', {
-        appType
-      })) as { success: boolean; reason?: string; regions?: BoxRegions } | undefined
-      if (result?.success && result.regions) {
-        setRegions(result.regions)
-        showToast('已保存框选区域', 'success')
-      } else if (result?.reason === 'cancelled' || result?.reason === 'closed') {
-        showToast('框选已取消', 'error')
-      } else {
-        showToast('框选失败', 'error')
-      }
-    } finally {
-      setOpeningWizard(false)
-    }
-  }, [appType, status])
-
-  const addLog = useCallback((type: LogEntry['type'], content: string) => {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false })
-    setLogs((prev) => [...prev.slice(-99), { time, type, content }])
-  }, [])
-
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight
-    }
-  }, [logs])
-
-  useEffect(() => {
-    const cleanup = window.electron?.on('engine:log', (data: { type: string; content: string }) => {
-      addLog(data.type as LogEntry['type'], data.content)
-
-      if (data.type === 'error' && data.content.includes('引擎无法启动')) {
-        setStatus('error')
-      }
-    })
-    return cleanup
-  }, [addLog, setStatus])
-
-  const statusLabel =
-    status === 'running'
-      ? t('status.running')
-      : status === 'error'
-        ? t('status.error')
-        : t('status.idle')
-
-  const isVlm = isVlmSupported(appType)
-  const captureReady = isVlm || regions !== null
-
-  return (
-    <div className="fade-in">
-      <div className={`status-indicator ${status}`}>
-        <div className={`status-dot ${status}`} />
-        <span className="status-text">{statusLabel}</span>
-      </div>
-
-      <TargetAppQuickCard
-        appType={appType}
-        regions={regions}
-        captureReady={captureReady}
-        isVlm={isVlm}
-        openingWizard={openingWizard}
-        running={status === 'running'}
-        onAppTypeChange={handleAppTypeChange}
-        onOpenWizard={handleOpenWizard}
-      />
-
-      <div className="card">
-        <div className="card-title">{t('control.log')}</div>
-        <div className="message-log" ref={logRef}>
-          {logs.length === 0 ? (
-            <div className="message-log-empty">{t('control.log.empty')}</div>
-          ) : (
-            logs.map((entry, i) => (
-              <div className="log-entry" key={i}>
-                <span className="log-time">{entry.time}</span>
-                <span className={`log-type ${entry.type}`}>
-                  {t(`control.log.${entry.type}` as never)}
-                </span>
-                <span>{entry.content}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface TargetAppQuickCardProps {
-  appType: AppType
-  regions: BoxRegions | null
-  captureReady: boolean
-  isVlm: boolean
-  openingWizard: boolean
-  running: boolean
-  onAppTypeChange: (t: AppType) => void
-  onOpenWizard: () => void
-}
-
-// 首屏的"目标应用 + 框选"快捷卡片：让新用户开箱即用，不用先翻设置。
-function TargetAppQuickCard({
-  appType,
-  regions,
-  captureReady,
-  isVlm,
-  openingWizard,
-  running,
-  onAppTypeChange,
-  onOpenWizard
-}: TargetAppQuickCardProps): React.JSX.Element {
-  const statusText = isVlm
-    ? '自动识别（VLM）'
-    : regions
-      ? '已框选 3 / 3 个区域'
-      : '尚未框选'
-
-  return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div className="card-title">目标应用</div>
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <select
-          className="form-input"
-          value={appType}
-          onChange={(e) => onAppTypeChange(e.target.value as AppType)}
-          disabled={running || openingWizard}
-          style={{ flex: 1 }}
-        >
-          {(Object.keys(APP_TYPE_LABELS) as AppType[]).map((type) => (
-            <option key={type} value={type}>
-              {APP_TYPE_LABELS[type]}
-              {!isVlmSupported(type) ? '（框选）' : ''}
-            </option>
-          ))}
-        </select>
-
-        {!isVlm && (
-          <button
-            className="btn btn-primary"
-            onClick={onOpenWizard}
-            disabled={running || openingWizard}
-            style={{
-              whiteSpace: 'nowrap',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              {regions ? (
-                // 重新框选 — 旋转刷新图标
-                <>
-                  <path d="M21 12a9 9 0 1 1-3-6.7" />
-                  <path d="M21 4v5h-5" />
-                </>
-              ) : (
-                // 开始框选 — 矩形 + 十字
-                <>
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="12" y1="8" x2="12" y2="16" />
-                  <line x1="8" y1="12" x2="16" y2="12" />
-                </>
-              )}
-            </svg>
-            {openingWizard ? '打开中...' : regions ? '重新框选' : '开始框选'}
-          </button>
-        )}
-      </div>
-
-      <div
-        className="form-hint"
-        style={{
-          marginTop: 10,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          color: captureReady ? '#94a3b8' : '#fbbf24'
-        }}
-      >
-        <span
-          style={{
-            display: 'inline-block',
-            width: 8,
-            height: 8,
-            borderRadius: 999,
-            background: captureReady ? '#34d399' : '#fbbf24'
-          }}
-        />
-        {statusText}
-        {!isVlm && !regions ? '：点右侧按钮先把 3 个关键区域圈出来' : ''}
-      </div>
-    </div>
-  )
-}
-
-function BottomBar({
-  status,
-  setStatus
-}: {
-  status: EngineStatus
-  setStatus: (s: EngineStatus) => void
-}) {
-  const handleStart = useCallback(async () => {
-    const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
-    if (!settings?.vision?.apiKey) {
-      showToast(t('control.start.novisionkey'), 'error')
-      return
-    }
-    // 没装自定义 provider → 走内置 doubao（getInstalled 会返回 isBuiltinDefault: true）
-    const providerInfo = (await window.electron?.invoke('provider:getInstalled')) as {
-      manifest: ProviderManifest | null
-      isBuiltinDefault?: boolean
-    }
-    // doubao 默认共享视觉密钥，required 已剥离 apiKey
-    const required = providerInfo?.manifest?.configSchema?.required || []
-    const missing = required.find((key) => {
-      const value = settings.chatProvider.config?.[key]
-      return value === undefined || value === null || value === ''
-    })
-    if (missing) {
-      showToast(`${t('control.start.missingProviderField')}: ${missing}`, 'error')
-      return
-    }
-
-    const result = await window.electron?.invoke('engine:start', settings)
-    if (result?.success) {
-      setStatus('running')
-      showToast(t('toast.engineStarted'), 'success')
-    } else {
-      setStatus('error')
-      showToast(result?.error || t('toast.startFailed'), 'error')
-    }
-  }, [setStatus])
-
-  const handleStop = useCallback(async () => {
-    await window.electron?.invoke('engine:stop')
-    setStatus('idle')
-    showToast(t('toast.engineStopped'), 'success')
-  }, [setStatus])
-
-  const running = status === 'running'
-
-  return (
-    <div className="bottom-bar">
-      {running ? (
-        <button className="bottom-btn bottom-btn-stop" onClick={handleStop}>
-          <StopIcon />
-          {t('control.stop')}
-        </button>
-      ) : (
-        <button className="bottom-btn bottom-btn-play" onClick={handleStart}>
-          <PlayIcon />
-          {t('control.start')}
-        </button>
-      )}
-      <button
-        className="bottom-btn bottom-btn-settings"
-        onClick={() => window.electron?.invoke('memory:open')}
-        title="工作记忆"
-      >
-        <MemoryIcon />
-      </button>
-      <button
-        className="bottom-btn bottom-btn-settings"
-        onClick={() => window.electron?.invoke('settings:open')}
-        title="设置"
-      >
-        <GearIcon />
-      </button>
     </div>
   )
 }
