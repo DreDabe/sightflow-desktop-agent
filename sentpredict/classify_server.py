@@ -17,7 +17,8 @@ from transformers import BertTokenizer
 from BertModel import BertClassifier
 
 BERT_MODEL_PATH = 'bert-base-chinese'
-STATE_DICT_PATH = 'models/best.pt'
+MODEL_DIR = os.environ.get('SENTIMENT_MODEL_DIR', 'models')
+STATE_DICT_PATH = os.path.join(MODEL_DIR, 'best.pt')
 CLASS_NAMES = ['无抑郁', '轻度抑郁', '中度抑郁', '重度抑郁', '极重度抑郁']
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

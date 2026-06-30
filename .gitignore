@@ -36,3 +36,6 @@ __pycache__/
 # Training outputs
 sentpredict/loss_curve.png
 sentpredict/ROC_curve.png
+
+# Embedded Python (downloaded via setup script)
+resources/python/

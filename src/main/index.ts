@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, desktopCapturer } from 'electron'
 import { join } from 'path'
+import { mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { checkAndRequestPermissions } from './permission'
@@ -41,7 +42,7 @@ import {
 import { TraceStepInput } from '../core/trace/trace-types'
 import { ExperienceStore, NewExperienceCard } from '../core/memory/experience-store'
 import { induceCardsFromSession } from '../core/memory/learn-from-session'
-import { SentimentClassifier, ensurePythonDeps } from '../core/sentiment/classifier'
+import { SentimentClassifier, ensurePythonDeps, checkPythonInstalled, ensureScriptsCopied } from '../core/sentiment/classifier'
 import { spawn as spawnChild, ChildProcess } from 'child_process'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 
@@ -152,6 +153,10 @@ let experienceStoreInstance: ExperienceStore | null = null
 
 function worktraceBaseDir(): string {
   return join(app.getPath('userData'), 'worktrace')
+}
+
+function sentimentModelDir(): string {
+  return join(app.getPath('userData'), 'sentpredict-models')
 }
 
 function getTraceRecorder(): TraceRecorder {
@@ -439,6 +444,15 @@ app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
+  // 预先创建情感分析模型目录
+  const modelDir = sentimentModelDir()
+  try {
+    mkdirSync(modelDir, { recursive: true })
+    console.log(`[Main] 情感分析模型目录已创建: ${modelDir}`)
+  } catch (err: any) {
+    console.error(`[Main] 创建模型目录失败: ${err.message}`)
+  }
+
   // 检查和请求 macOS 需要的权限
   await checkAndRequestPermissions()
 
@@ -706,12 +720,18 @@ app.whenReady().then(async () => {
       return { ok: false, error: '训练正在进行中' }
     }
 
-    const scriptDir = join(app.getAppPath(), 'sentpredict')
+    const userDataPath = app.getPath('userData')
+    const scriptDir = ensureScriptsCopied(app.getAppPath(), userDataPath)
 
     try {
-      await ensurePythonDeps(scriptDir)
+      await ensurePythonDeps(scriptDir, userDataPath)
     } catch (err: any) {
       return { ok: false, error: err.message || 'Python 依赖安装失败' }
+    }
+
+    const pythonCheck = checkPythonInstalled()
+    if (!pythonCheck.installed || !pythonCheck.path) {
+      return { ok: false, error: pythonCheck.error || '未检测到 Python 环境' }
     }
 
     const sendTrainEvent = (data: any) => {
@@ -722,21 +742,33 @@ app.whenReady().then(async () => {
       }
     }
 
+    const libsDir = join(userDataPath, 'sentpredict-libs')
+    const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\WINDOWS'
+    const trainEnv: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      SystemRoot: systemRoot,
+      SYSTEMROOT: systemRoot,
+      PATH: [join(systemRoot, 'system32'), join(systemRoot, 'System32', 'Wbem'), systemRoot, process.env.PATH || ''].join(';'),
+      HF_ENDPOINT: 'https://hf-mirror.com',
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUTF8: '1',
+      SENTIMENT_MODEL_DIR: sentimentModelDir(),
+      PYTHONPATH: libsDir
+    }
+
     console.log('[Train] 正在启动训练进程...')
+    console.log(`[Train] Python 路径: ${pythonCheck.path}`)
+    console.log(`[Train] 脚本目录: ${scriptDir}`)
+    console.log(`[Train] 模型保存目录: ${sentimentModelDir()}`)
     console.log('[Train] ⚠ 训练过程耗时较长（约数小时），请耐心等待。训练进度将在下方日志中实时显示。')
     sendTrainEvent({
       type: 'hint',
       message: '⚠ 训练过程耗时较长（约数小时），请耐心等待。训练进度将在下方日志中实时显示。'
     })
-    trainingProcess = spawnChild('python', ['train_server.py'], {
+    trainingProcess = spawnChild(pythonCheck.path, ['train_server.py'], {
       cwd: scriptDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        HF_ENDPOINT: 'https://hf-mirror.com',
-        PYTHONIOENCODING: 'utf-8',
-        PYTHONUTF8: '1'
-      }
+      env: trainEnv
     })
 
     let buffer = ''
@@ -1022,7 +1054,12 @@ async function startEngineCore(rawConfig?: any): Promise<SkillStartResult> {
       })
 
       sentimentClassifier = new SentimentClassifier()
-      await sentimentClassifier.start(join(app.getAppPath(), 'sentpredict'))
+      const scriptDir = ensureScriptsCopied(app.getAppPath(), app.getPath('userData'))
+      await sentimentClassifier.start(
+        scriptDir,
+        sentimentModelDir(),
+        app.getPath('userData')
+      )
 
       extractChatTextFn = (screenshot) => textExtractClient.extractChatText(screenshot)
       classifySentimentFn = (text) => sentimentClassifier!.classify(text)

@@ -7,8 +7,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts'),
-          'test-cli': resolve(__dirname, 'scripts/test-cli.ts')
+          index: resolve(__dirname, 'src/main/index.ts')
         }
       }
     }

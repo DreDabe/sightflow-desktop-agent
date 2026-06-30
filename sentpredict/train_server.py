@@ -100,7 +100,7 @@ batch_size = 32
 lr = 1e-5
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 random_seed = 2023
-save_path = 'models'
+save_path = os.environ.get('SENTIMENT_MODEL_DIR', 'models')
 
 setup_seed(random_seed)
 
