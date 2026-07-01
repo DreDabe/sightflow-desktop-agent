@@ -532,6 +532,12 @@ button:focus-visible {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.status-dot.starting {
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.35);
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .status-dot.error { background: var(--error); }
 
 .status-text {
@@ -1095,6 +1101,10 @@ textarea.form-input {
   color: var(--error);
 }
 
+.mode-status.starting {
+  color: #60a5fa;
+}
+
 .mode-info-row {
   display: flex;
   gap: 16px;
@@ -1150,6 +1160,24 @@ textarea.form-input {
 
 .btn-stop:hover {
   background: rgba(248, 113, 113, 0.15);
+}
+
+.btn-starting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 28px;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  background: rgba(96, 165, 250, 0.08);
+  color: #60a5fa;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: not-allowed;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  min-width: 100px;
+  height: 28px;
+  opacity: 0.8;
 }
 
 .btn-sm {

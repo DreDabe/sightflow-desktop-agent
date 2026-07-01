@@ -854,6 +854,24 @@ app.whenReady().then(async () => {
     settingsStore.set({ ...settings, modes: allModes } as any)
     return { success: true }
   })
+  ipcMain.handle('reply:paste', async (_event, text: string) => {
+    if (typeof text !== 'string' || !text) return { success: false, error: '文本为空' }
+    const { clipboard } = await import('electron')
+    clipboard.writeText(text)
+    return { success: true }
+  })
+
+  ipcMain.handle('reply:send', async (_event, text: string) => {
+    if (typeof text !== 'string' || !text) return { success: false, error: '文本为空' }
+    if (!runtimeDevice) return { success: false, error: '引擎未运行' }
+    try {
+      await runtimeDevice.sendMessage(text)
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error?.message || String(error) }
+    }
+  })
+
   ipcMain.handle('memory:open', async () => {
     createMemoryWindow()
     return { success: true }

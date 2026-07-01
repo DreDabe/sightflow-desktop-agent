@@ -256,12 +256,43 @@ const RefreshIcon = (): React.JSX.Element => (
   </svg>
 )
 
+interface ModeState {
+  logs: LogEntry[]
+  recommendedReply: string
+  modeRunning: boolean
+  modeStarting: boolean
+}
+
 function App() {
   const windowKind = new URLSearchParams(window.location.search).get('window')
   const [modes, setModes] = useState<ReplyMode[]>([])
   const [activeModeId, setActiveModeId] = useState<string>('')
   const [showAddModeModal, setShowAddModeModal] = useState(false)
   const [runningModeIds, setRunningModeIds] = useState<Set<string>>(new Set())
+  const [modeStates, setModeStates] = useState<Map<string, ModeState>>(new Map())
+
+  const getModeState = useCallback((modeId: string): ModeState => {
+    return modeStates.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
+  }, [modeStates])
+
+  const updateModeState = useCallback((modeId: string, patch: Partial<ModeState>) => {
+    setModeStates((prev) => {
+      const next = new Map(prev)
+      const current = next.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
+      next.set(modeId, { ...current, ...patch })
+      return next
+    })
+  }, [])
+
+  const addLogToMode = useCallback((modeId: string, type: LogEntry['type'], content: string) => {
+    setModeStates((prev) => {
+      const next = new Map(prev)
+      const current = next.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false })
+      next.set(modeId, { ...current, logs: [...current.logs.slice(-99), { time, type, content }] })
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     const cleanup = window.electron?.on('engine:state', () => {})
@@ -276,9 +307,33 @@ function App() {
         else next.delete(data.modeId)
         return next
       })
+      updateModeState(data.modeId, {
+        modeRunning: data.running,
+        modeStarting: data.running ? false : undefined as any
+      })
     })
     return cleanup
-  }, [])
+  }, [updateModeState])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('engine:log', (data: { type: string; content: string; modeId?: string }) => {
+      const targetModeId = data.modeId || activeModeId
+      if (!targetModeId) return
+      const ms = modeStates.get(targetModeId)
+      if (!ms || (!ms.modeRunning && !ms.modeStarting)) return
+      addLogToMode(targetModeId, data.type as LogEntry['type'], data.content)
+    })
+    return cleanup
+  }, [activeModeId, modeStates, addLogToMode])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('engine:recommendReply', (data: { text: string; modeId?: string }) => {
+      const targetModeId = data.modeId || activeModeId
+      if (!targetModeId) return
+      updateModeState(targetModeId, { recommendedReply: data.text })
+    })
+    return cleanup
+  }, [activeModeId, updateModeState])
 
   const loadModes = useCallback(async () => {
     const list = (await window.electron?.invoke('mode:list')) as ReplyMode[]
@@ -369,7 +424,7 @@ function App() {
 
       <main className="main-content">
         {activeMode ? (
-          <ModeSubInterface key={activeMode.id} mode={activeMode} onModesChanged={loadModes} />
+          <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} />
         ) : (
           <div className="main-content-empty">
             <p>请从左侧选择一个模式，或添加新的自定义模式</p>
@@ -391,18 +446,24 @@ function App() {
 
 function ModeSubInterface({
   mode,
+  modeState,
+  updateModeState,
   onModesChanged
 }: {
   mode: ReplyMode
+  modeState: ModeState
+  updateModeState: (patch: Partial<ModeState>) => void
   onModesChanged: () => void
 }): React.JSX.Element {
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [recommendedReply, setRecommendedReply] = useState('')
   const [modeData, setModeData] = useState(mode)
-  const [modeRunning, setModeRunning] = useState(false)
   const [appType, setAppType] = useState<AppType>('wechat')
   const [showAddObjectModal, setShowAddObjectModal] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+
+  const logs = modeState.logs
+  const recommendedReply = modeState.recommendedReply
+  const modeRunning = modeState.modeRunning
+  const modeStarting = modeState.modeStarting
 
   useEffect(() => {
     const load = async () => {
@@ -416,37 +477,9 @@ function ModeSubInterface({
     setModeData(mode)
   }, [mode])
 
-  const addLog = useCallback((type: LogEntry['type'], content: string) => {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false })
-    setLogs((prev) => [...prev.slice(-99), { time, type, content }])
-  }, [])
-
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs])
-
-  useEffect(() => {
-    const cleanup = window.electron?.on('engine:log', (data: { type: string; content: string; modeId?: string }) => {
-      if (data.modeId && data.modeId !== mode.id) return
-      addLog(data.type as LogEntry['type'], data.content)
-    })
-    return cleanup
-  }, [addLog, mode.id])
-
-  useEffect(() => {
-    const cleanup = window.electron?.on('engine:recommendReply', (data: { text: string; modeId?: string }) => {
-      if (data.modeId && data.modeId !== mode.id) return
-      setRecommendedReply(data.text)
-    })
-    return cleanup
-  }, [mode.id])
-
-  useEffect(() => {
-    const cleanup = window.electron?.on('mode:runningChanged', (data: { modeId: string; running: boolean }) => {
-      if (data.modeId === mode.id) setModeRunning(data.running)
-    })
-    return cleanup
-  }, [mode.id])
 
   const handleStart = useCallback(async () => {
     const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
@@ -455,24 +488,26 @@ function ModeSubInterface({
       showToast('请先配置视觉模型', 'error')
       return
     }
+    updateModeState({ modeStarting: true })
     const result = await window.electron?.invoke('mode:start', mode.id)
     if (result?.success) {
-      setModeRunning(true)
+      updateModeState({ modeRunning: true, modeStarting: false })
       showToast('模式已启动', 'success')
     } else {
+      updateModeState({ modeStarting: false })
       showToast(result?.error || '启动失败', 'error')
     }
-  }, [mode.id])
+  }, [mode.id, updateModeState])
 
   const handleStop = useCallback(async () => {
     const result = await window.electron?.invoke('mode:stop', mode.id)
     if (result?.success) {
-      setModeRunning(false)
+      updateModeState({ modeRunning: false })
       showToast('模式已停止', 'success')
     } else {
       showToast(result?.error || '停止失败', 'error')
     }
-  }, [mode.id])
+  }, [mode.id, updateModeState])
 
   const handleToggleAutoReply = useCallback(async () => {
     const next = !modeData.autoReply
@@ -507,7 +542,8 @@ function ModeSubInterface({
   }, [recommendedReply])
 
   const running = modeRunning
-  const statusLabel = running ? '运行中' : '已停止'
+  const starting = modeStarting
+  const statusLabel = running ? '运行中' : starting ? '启动中' : '已停止'
   const appTypeLabel = APP_TYPE_LABELS[appType] || appType
 
   return (
@@ -515,8 +551,8 @@ function ModeSubInterface({
       <div className="mode-header">
         <div className="mode-header-left">
           <h2 className="mode-name">{modeData.name}</h2>
-          <span className={`mode-status ${running ? 'running' : 'stopped'}`}>
-            <span className={`status-dot ${running ? 'running' : 'idle'}`} />
+          <span className={`mode-status ${running ? 'running' : starting ? 'starting' : 'stopped'}`}>
+            <span className={`status-dot ${running ? 'running' : starting ? 'starting' : 'idle'}`} />
             {statusLabel}
           </span>
         </div>
@@ -524,6 +560,10 @@ function ModeSubInterface({
           {running ? (
             <button className="btn btn-stop" onClick={handleStop}>
               <StopIcon /> 停止
+            </button>
+          ) : starting ? (
+            <button className="btn btn-starting" disabled>
+              <PlayIcon /> 启动中
             </button>
           ) : (
             <button className="btn btn-primary" onClick={handleStart} style={{ minWidth: 100, height: 28 }}>
@@ -585,7 +625,7 @@ function ModeSubInterface({
         <textarea
           className="form-input recommended-reply"
           value={recommendedReply}
-          onChange={(e) => setRecommendedReply(e.target.value)}
+          onChange={(e) => updateModeState({ recommendedReply: e.target.value })}
           placeholder="AI 生成的推荐回复将显示在这里"
           rows={3}
         />

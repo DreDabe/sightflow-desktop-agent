@@ -272,7 +272,7 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
   ): Promise<void> {
     try {
       let sentimentResult: SentimentResult | undefined
-      if (ctx.host.extractChatText && ctx.host.classifySentiment) {
+      if (ctx.state.currentModeSentimentEnabled && ctx.host.extractChatText && ctx.host.classifySentiment) {
         try {
           ctx.host.log('thinking', '正在提取聊天文本...')
           const extractedText = await ctx.host.extractChatText(screenshot)
