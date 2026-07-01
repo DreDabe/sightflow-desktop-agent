@@ -1430,9 +1430,15 @@ select option {
 }
 
 .message-log-fixed-160 {
-  min-height: 80px;
-  max-height: 80px;
-  height: 80px;
+  min-height: 120px;
+  max-height: 120px;
+  height: 120px;
+  overflow-y: auto;
+}
+
+.message-log-fixed-160 .message-log-empty {
+  height: auto;
+  min-height: unset;
 }
 
 /* ─── Work Memory（工作记忆窗口） ─── */
