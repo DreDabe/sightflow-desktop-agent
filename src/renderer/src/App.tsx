@@ -1245,11 +1245,11 @@ function ModelEditModal({
   }, [provider, isEdit])
 
   const handleSave = useCallback(async () => {
-    if (!name.trim()) { showToast('模型名称不能为空', 'error'); return }
     if (!modelName.trim()) { showToast('模型标识不能为空', 'error'); return }
     if (!apiKey.trim()) { showToast('API Key 不能为空', 'error'); return }
 
-    const input = { name: name.trim(), provider, modelName: modelName.trim(), apiKey, baseURL }
+    const displayName = name.trim() || modelName.trim()
+    const input = { name: displayName, provider, modelName: modelName.trim(), apiKey, baseURL }
     const result = isEdit
       ? await window.electron?.invoke('model:update', model!.id, input)
       : await window.electron?.invoke('model:create', input)
@@ -1269,7 +1269,17 @@ function ModelEditModal({
 
         <div className="form-group">
           <label className="form-label">供应商 <span className="required-mark">*</span></label>
-          <select className="form-input" value={provider} onChange={(e) => setProvider(e.target.value)} disabled={isEdit}>
+          <select className="form-input" value={provider} onChange={(e) => {
+            const p = e.target.value
+            setProvider(p)
+            if (!isEdit) {
+              const preset = PROVIDER_PRESETS.find((pr) => pr.id === p)
+              if (preset) {
+                if (!baseURL) setBaseURL(preset.defaultBaseURL)
+                if (!modelName) setModelName(preset.defaultModel)
+              }
+            }
+          }} disabled={isEdit}>
             {PROVIDER_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -1277,9 +1287,9 @@ function ModelEditModal({
         </div>
 
         <div className="form-group">
-          <label className="form-label">模型名称 <span className="required-mark">*</span></label>
-          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的豆包模型" />
-          <div className="form-hint">用于在界面中识别此模型配置</div>
+          <label className="form-label">模型名称</label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的豆包模型（可选）" />
+          <div className="form-hint">用于在界面中识别此模型配置，留空则使用模型标识</div>
         </div>
 
         <div className="form-group">
