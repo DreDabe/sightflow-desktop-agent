@@ -188,8 +188,8 @@ function getExperienceStore(): ExperienceStore {
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 800,
+    width: 700,
+    height: 750,
     minWidth: 360,
     minHeight: 500,
     show: false,

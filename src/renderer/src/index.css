@@ -921,7 +921,7 @@ textarea.form-input {
 /* ─── Main Shell (Left Sidebar + Mode Sub-Interface) ─── */
 .main-shell {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
 }
@@ -933,6 +933,14 @@ textarea.form-input {
   flex-direction: column;
   padding: 12px 8px;
   overflow-y: auto;
+  transition: width var(--transition-normal);
+  width: 180px;
+}
+
+.main-sidebar.collapsed {
+  width: 48px;
+  padding: 12px 4px;
+  align-items: center;
 }
 
 .main-sidebar-brand {
@@ -940,6 +948,60 @@ textarea.form-input {
   align-items: center;
   justify-content: center;
   padding: 8px 0 16px;
+  gap: 8px;
+}
+
+.main-sidebar.collapsed .main-sidebar-brand {
+  padding: 8px 0 8px;
+}
+
+.main-sidebar-brand-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.main-sidebar-collapse-btn {
+  width: 100%;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  transition: all var(--transition-fast);
+}
+
+.main-sidebar-collapse-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-glass-heavy);
+}
+
+.main-sidebar.collapsed .main-sidebar-collapse-btn {
+  font-size: 9px;
+  padding: 4px 0;
+}
+
+.main-sidebar.collapsed .main-sidebar-item {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.main-sidebar.collapsed .main-sidebar-item-add {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.main-sidebar.collapsed .main-sidebar-bottom {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.main-sidebar.collapsed .main-sidebar-bottom-btn {
+  padding: 6px 0;
 }
 
 .main-sidebar-brand .app-logo {
@@ -1308,7 +1370,7 @@ select option {
 }
 
 .card-fixed-194 {
-  height: 194px;
+  height: 174px;
   padding: 12px 16px;
   overflow: hidden;
 }
@@ -1318,9 +1380,9 @@ select option {
 }
 
 .message-log-fixed-160 {
-  min-height: 160px;
-  max-height: 160px;
-  height: 160px;
+  min-height: 140px;
+  max-height: 140px;
+  height: 140px;
 }
 
 /* ─── Work Memory（工作记忆窗口） ─── */

@@ -270,6 +270,7 @@ function App() {
   const [showAddModeModal, setShowAddModeModal] = useState(false)
   const [runningModeIds, setRunningModeIds] = useState<Set<string>>(new Set())
   const [modeStates, setModeStates] = useState<Map<string, ModeState>>(new Map())
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const getModeState = useCallback((modeId: string): ModeState => {
     return modeStates.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
@@ -382,10 +383,18 @@ function App() {
 
   return (
     <div className="app main-shell">
-      <aside className="main-sidebar">
+      <aside className={`main-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="main-sidebar-brand">
           <img src={logoUrl} alt="SightFlow" className="app-logo" />
+          {!sidebarCollapsed && <span className="main-sidebar-brand-text">SightFlow</span>}
         </div>
+        <button
+          className="main-sidebar-collapse-btn"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? '展开菜单' : '收起菜单'}
+        >
+          {sidebarCollapsed ? '▶' : '◀'}
+        </button>
         <div className="main-sidebar-modes">
           {enabledModes.map((mode) => (
             <button
@@ -395,7 +404,7 @@ function App() {
               title={mode.name}
             >
               <span className={`mode-status-dot ${runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
-              <span className="main-sidebar-item-name">{mode.name}</span>
+              {!sidebarCollapsed && <span className="main-sidebar-item-name">{mode.name}</span>}
             </button>
           ))}
         </div>
@@ -403,8 +412,9 @@ function App() {
         <button
           className="main-sidebar-item main-sidebar-item-add"
           onClick={() => setShowAddModeModal(true)}
+          title="添加模式"
         >
-          + 添加模式
+          {sidebarCollapsed ? '+' : '+ 添加模式'}
         </button>
         <div className="main-sidebar-divider" />
         <div className="main-sidebar-bottom">
