@@ -987,24 +987,33 @@ textarea.form-input {
 
 .main-sidebar.collapsed .main-sidebar-item {
   justify-content: center;
-  padding: 10px 0;
+  padding: 0;
   min-height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  margin: 2px auto;
 }
 
 .main-sidebar.collapsed .main-sidebar-item-add {
   font-size: 16px;
   font-weight: 600;
   min-height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  margin: 2px auto;
 }
 
 .main-sidebar.collapsed .main-sidebar-bottom {
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  align-items: center;
 }
 
 .main-sidebar.collapsed .main-sidebar-bottom-btn {
-  padding: 10px 0;
+  padding: 0;
   min-height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
 }
 
 .main-sidebar-item-name {
@@ -1378,6 +1387,28 @@ select option {
   height: 24px;
 }
 
+.object-search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.object-search-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.object-search-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
 .card-fixed-154 {
   height: 154px;
   padding: 12px 16px;
@@ -1389,7 +1420,7 @@ select option {
 }
 
 .card-fixed-194 {
-  height: 134px;
+  height: 238px;
   padding: 12px 16px;
   overflow: hidden;
 }
@@ -1399,9 +1430,9 @@ select option {
 }
 
 .message-log-fixed-160 {
-  min-height: 100px;
-  max-height: 100px;
-  height: 100px;
+  min-height: 204px;
+  max-height: 204px;
+  height: 204px;
 }
 
 /* ─── Work Memory（工作记忆窗口） ─── */

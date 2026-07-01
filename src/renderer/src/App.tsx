@@ -615,14 +615,21 @@ function ModeSubInterface({
       <div className="card card-fixed-154">
         <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span>特定对象</span>
-          <input
-            className="form-input object-search-input"
-            type="text"
-            placeholder="搜索对象"
-            value={objectSearch}
-            onChange={(e) => setObjectSearch(e.target.value)}
-          />
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)} style={{ marginLeft: 'auto', flexShrink: 0 }}>添加</button>
+          <div className="object-search-wrapper">
+            <svg className="object-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              className="form-input object-search-input"
+              type="text"
+              placeholder="搜索对象"
+              value={objectSearch}
+              onChange={(e) => setObjectSearch(e.target.value)}
+            />
+            <button className="btn btn-secondary btn-sm object-search-btn">搜索</button>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)} style={{ marginLeft: 'auto', flexShrink: 0 }}>+添加对象</button>
         </div>
         {modeData.specificObjects.length === 0 ? (
           <div className="object-list-empty">暂无特定对象</div>
