@@ -600,13 +600,13 @@ function ModeSubInterface({
         )}
       </div>
 
-      <div className="card">
+      <div className="card card-fixed-154">
         <div className="card-title">
           特定对象
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)}>+ 添加</button>
         </div>
         {modeData.specificObjects.length === 0 ? (
-          <div className="message-log-empty">暂无特定对象</div>
+          <div className="object-list-empty">暂无特定对象</div>
         ) : (
           <div className="object-list">
             {modeData.specificObjects.map((obj) => (
@@ -638,9 +638,9 @@ function ModeSubInterface({
         </div>
       </div>
 
-      <div className="card">
+      <div className="card card-fixed-194">
         <div className="card-title">运行日志</div>
-        <div className="message-log" ref={logRef}>
+        <div className="message-log message-log-fixed-160" ref={logRef}>
           {logs.length === 0 ? (
             <div className="message-log-empty">暂无日志</div>
           ) : (
