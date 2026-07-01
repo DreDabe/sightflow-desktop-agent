@@ -26,6 +26,7 @@ interface RuntimeHostOptions<TState> {
   onRecommendReply?: (text: string) => void
   identifyContact?: (screenshot: string) => Promise<string>
   resolveMode?: (contactName: string) => { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
+  onSetAutoReply?: (autoReply: boolean) => void
 }
 
 export class RuntimeHost<TState> {
@@ -92,6 +93,15 @@ export class RuntimeHost<TState> {
     this.context.appType = appType
   }
 
+  updateAutoReply(autoReply: boolean): void {
+    if (this.running && this.context) {
+      const state = this.context.state as any
+      if (state && 'currentModeAutoReply' in state) {
+        state.currentModeAutoReply = autoReply
+      }
+    }
+  }
+
   private createControls(): RuntimeHostControls {
     return {
       enqueue: (event) => this.enqueue(event),
@@ -106,7 +116,8 @@ export class RuntimeHost<TState> {
       getAutoReply: () => this.options.getAutoReply?.() ?? true,
       recommendReply: (text: string) => this.options.onRecommendReply?.(text),
       identifyContact: (screenshot: string) => this.options.identifyContact?.(screenshot) ?? Promise.resolve(''),
-      resolveMode: (contactName: string) => this.options.resolveMode?.(contactName) ?? null
+      resolveMode: (contactName: string) => this.options.resolveMode?.(contactName) ?? null,
+      setAutoReply: (autoReply: boolean) => this.options.onSetAutoReply?.(autoReply)
     }
   }
 

@@ -47,6 +47,7 @@ export interface RuntimeHostControls {
   recommendReply(text: string): void
   identifyContact(screenshot: string): Promise<string>
   resolveMode(contactName: string): { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
+  setAutoReply(autoReply: boolean): void
 }
 
 export interface ChannelContext<TState> {

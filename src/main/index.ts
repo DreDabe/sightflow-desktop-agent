@@ -805,6 +805,22 @@ app.whenReady().then(async () => {
     return { success: false, error: result.message || result.reason }
   })
 
+  ipcMain.handle('mode:setAutoReply', async (_event, modeId: string, autoReply: boolean) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
+    const rt = runtimeInstances.get(modeId)
+    if (rt?.isRunning()) {
+      rt.updateAutoReply(autoReply)
+    }
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const mode = allModes.find((m) => m.id === modeId)
+    if (mode) {
+      mode.autoReply = autoReply
+      settingsStore.set({ ...settings, modes: allModes } as any)
+    }
+    return { success: true }
+  })
+
   // ── 特定对象 CRUD ──
   ipcMain.handle('object:create', async (_event, modeId: string, input: Partial<SpecificObject>) => {
     if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }

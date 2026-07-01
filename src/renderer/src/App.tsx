@@ -530,6 +530,7 @@ function ModeSubInterface({
     if (result?.success) {
       setModeData((prev) => ({ ...prev, autoReply: next }))
       onModesChanged()
+      await window.electron?.invoke('mode:setAutoReply', modeData.id, next)
     }
   }, [modeData, onModesChanged])
 
