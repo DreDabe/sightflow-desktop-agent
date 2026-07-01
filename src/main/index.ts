@@ -188,7 +188,7 @@ function getExperienceStore(): ExperienceStore {
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 1000,
+    width: 600,
     height: 700,
     minWidth: 360,
     minHeight: 500,
@@ -1354,29 +1354,37 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
     let extractChatTextFn: ((screenshot: string) => Promise<string>) | undefined
     let classifySentimentFn: ((text: string) => Promise<import('../core/sentiment/types').SentimentResult>) | undefined
 
-    try {
-      const textExtractClient = new AIClient({
-        apiKey: visionModel.apiKey,
-        model: visionModel.modelName,
-        baseURL: visionModel.baseURL
-      })
+    const allModes = ensureSystemModes(settings.modes)
+    const targetMode = allModes.find((m) => m.id === effectiveModeId)
+    const modeNeedsSentiment = targetMode?.sentimentEnabled === true
 
-      sentimentClassifier = new SentimentClassifier()
-      const scriptDir = ensureScriptsCopied(app.getAppPath(), app.getPath('userData'))
-      await sentimentClassifier.start(
-        scriptDir,
-        sentimentModelDir(),
-        app.getPath('userData')
-      )
+    if (modeNeedsSentiment) {
+      try {
+        const textExtractClient = new AIClient({
+          apiKey: visionModel.apiKey,
+          model: visionModel.modelName,
+          baseURL: visionModel.baseURL
+        })
 
-      extractChatTextFn = (screenshot) => textExtractClient.extractChatText(screenshot)
-      classifySentimentFn = (text) => sentimentClassifier!.classify(text)
+        sentimentClassifier = new SentimentClassifier()
+        const scriptDir = ensureScriptsCopied(app.getAppPath(), app.getPath('userData'))
+        await sentimentClassifier.start(
+          scriptDir,
+          sentimentModelDir(),
+          app.getPath('userData')
+        )
 
-      log('thinking', '情感分析模块已就绪 ✓')
-    } catch (error: any) {
-      console.error('[Main] 情感分析模块启动失败:', error?.message || error)
-      log('thinking', '情感分析模块启动失败，将跳过情感分析')
-      sentimentClassifier = null
+        extractChatTextFn = (screenshot) => textExtractClient.extractChatText(screenshot)
+        classifySentimentFn = (text) => sentimentClassifier!.classify(text)
+
+        log('thinking', '情感分析模块已就绪 ✓')
+      } catch (error: any) {
+        console.error('[Main] 情感分析模块启动失败:', error?.message || error)
+        log('thinking', '情感分析模块启动失败，将跳过情感分析')
+        sentimentClassifier = null
+      }
+    } else {
+      log('thinking', '当前模式未启用情感分析，已跳过')
     }
 
     const runtime = new RuntimeHost({

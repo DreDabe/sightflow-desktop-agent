@@ -330,7 +330,10 @@ function App() {
     const cleanup = window.electron?.on('engine:recommendReply', (data: { text: string; modeId?: string }) => {
       const targetModeId = data.modeId || activeModeId
       if (!targetModeId) return
-      updateModeState(targetModeId, { recommendedReply: data.text })
+      updateModeState(targetModeId, { recommendedReply: '' })
+      requestAnimationFrame(() => {
+        updateModeState(targetModeId, { recommendedReply: data.text })
+      })
     })
     return cleanup
   }, [activeModeId, updateModeState])
