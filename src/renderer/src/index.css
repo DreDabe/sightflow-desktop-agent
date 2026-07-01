@@ -987,12 +987,14 @@ textarea.form-input {
 
 .main-sidebar.collapsed .main-sidebar-item {
   justify-content: center;
-  padding: 8px 0;
+  padding: 10px 0;
+  min-height: 36px;
 }
 
 .main-sidebar.collapsed .main-sidebar-item-add {
   font-size: 16px;
   font-weight: 600;
+  min-height: 36px;
 }
 
 .main-sidebar.collapsed .main-sidebar-bottom {
@@ -1001,7 +1003,28 @@ textarea.form-input {
 }
 
 .main-sidebar.collapsed .main-sidebar-bottom-btn {
-  padding: 6px 0;
+  padding: 10px 0;
+  min-height: 36px;
+}
+
+.main-sidebar-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+
+.main-sidebar.collapsed .main-sidebar-item-name {
+  display: none;
+}
+
+.main-sidebar-item-add {
+  color: var(--accent);
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: all var(--transition-fast);
 }
 
 .main-sidebar-brand .app-logo {
@@ -1043,13 +1066,6 @@ textarea.form-input {
   color: var(--accent);
 }
 
-.main-sidebar-item-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .main-sidebar-item-badge {
   font-size: 10px;
   padding: 1px 5px;
@@ -1077,11 +1093,6 @@ textarea.form-input {
 .mode-status-dot.starting {
   background: #60a5fa;
   box-shadow: 0 0 6px rgba(96, 165, 250, 0.5);
-}
-
-.main-sidebar-item-add {
-  color: var(--accent);
-  justify-content: center;
 }
 
 .main-sidebar-divider {
@@ -1359,6 +1370,14 @@ select option {
   font-size: 12px;
 }
 
+.object-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  height: 24px;
+}
+
 .card-fixed-154 {
   height: 154px;
   padding: 12px 16px;
@@ -1370,7 +1389,7 @@ select option {
 }
 
 .card-fixed-194 {
-  height: 174px;
+  height: 134px;
   padding: 12px 16px;
   overflow: hidden;
 }
@@ -1380,9 +1399,9 @@ select option {
 }
 
 .message-log-fixed-160 {
-  min-height: 140px;
-  max-height: 140px;
-  height: 140px;
+  min-height: 100px;
+  max-height: 100px;
+  height: 100px;
 }
 
 /* ─── Work Memory（工作记忆窗口） ─── */

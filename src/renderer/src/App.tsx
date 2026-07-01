@@ -388,13 +388,6 @@ function App() {
           <img src={logoUrl} alt="SightFlow" className="app-logo" />
           {!sidebarCollapsed && <span className="main-sidebar-brand-text">SightFlow</span>}
         </div>
-        <button
-          className="main-sidebar-collapse-btn"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? '展开菜单' : '收起菜单'}
-        >
-          {sidebarCollapsed ? '▶' : '◀'}
-        </button>
         <div className="main-sidebar-modes">
           {enabledModes.map((mode) => (
             <button
@@ -414,9 +407,17 @@ function App() {
           onClick={() => setShowAddModeModal(true)}
           title="添加模式"
         >
-          {sidebarCollapsed ? '+' : '+ 添加模式'}
+          {!sidebarCollapsed && '+ 添加模式'}
+          {sidebarCollapsed && '+'}
         </button>
         <div className="main-sidebar-divider" />
+        <button
+          className="main-sidebar-collapse-btn"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? '展开菜单' : '收起菜单'}
+        >
+          {sidebarCollapsed ? '▶' : '◀'}
+        </button>
         <div className="main-sidebar-bottom">
           <button
             className="main-sidebar-item main-sidebar-bottom-btn"
@@ -471,6 +472,7 @@ function ModeSubInterface({
   const [modeData, setModeData] = useState(mode)
   const [appType, setAppType] = useState<AppType>('wechat')
   const [showAddObjectModal, setShowAddObjectModal] = useState(false)
+  const [objectSearch, setObjectSearch] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
 
   const logs = modeState.logs
@@ -611,15 +613,33 @@ function ModeSubInterface({
       </div>
 
       <div className="card card-fixed-154">
-        <div className="card-title">
-          特定对象
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)}>+ 添加</button>
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>特定对象</span>
+          <input
+            className="form-input object-search-input"
+            type="text"
+            placeholder="搜索对象"
+            value={objectSearch}
+            onChange={(e) => setObjectSearch(e.target.value)}
+          />
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)} style={{ marginLeft: 'auto', flexShrink: 0 }}>添加</button>
         </div>
         {modeData.specificObjects.length === 0 ? (
           <div className="object-list-empty">暂无特定对象</div>
         ) : (
           <div className="object-list">
-            {modeData.specificObjects.map((obj) => (
+            {modeData.specificObjects
+              .filter((obj) => {
+                if (!objectSearch.trim()) return true
+                const q = objectSearch.trim()
+                if (obj.name === q || obj.title === q || obj.relationship === q) return true
+                try {
+                  return new RegExp(q, 'i').test(obj.name) || new RegExp(q, 'i').test(obj.title || '') || new RegExp(q, 'i').test(obj.relationship || '')
+                } catch {
+                  return obj.name.includes(q) || (obj.title || '').includes(q) || (obj.relationship || '').includes(q)
+                }
+              })
+              .map((obj) => (
               <div key={obj.id} className="object-item">
                 <div className="object-item-info">
                   <span className="object-item-name">{obj.name}</span>
