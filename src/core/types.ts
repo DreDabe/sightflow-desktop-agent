@@ -1,3 +1,5 @@
+export type ModelCapability = 'text' | 'vision' | 'audio'
+
 export interface ModelConfig {
   id: string
   name: string
@@ -5,6 +7,7 @@ export interface ModelConfig {
   modelName: string
   apiKey: string
   baseURL: string
+  capabilities: ModelCapability[]
   createdAt: number
 }
 
@@ -37,24 +40,28 @@ export const PROVIDER_PRESETS = [
     id: 'volcengine-ark',
     name: '火山方舟 (Volcengine Ark)',
     defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-    defaultModel: 'doubao-seed-2-0-lite-260215'
+    defaultModel: 'doubao-seed-2-0-lite-260215',
+    defaultCapabilities: ['text', 'vision'] as ModelCapability[]
   },
   {
     id: 'openai',
     name: 'OpenAI',
     defaultBaseURL: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o'
+    defaultModel: 'gpt-4o',
+    defaultCapabilities: ['text', 'vision'] as ModelCapability[]
   },
   {
     id: 'deepseek',
     name: 'DeepSeek',
     defaultBaseURL: 'https://api.deepseek.com/v1',
-    defaultModel: 'deepseek-chat'
+    defaultModel: 'deepseek-chat',
+    defaultCapabilities: ['text'] as ModelCapability[]
   },
   {
     id: 'custom',
     name: '自定义',
     defaultBaseURL: '',
-    defaultModel: ''
+    defaultModel: '',
+    defaultCapabilities: ['text'] as ModelCapability[]
   }
 ]

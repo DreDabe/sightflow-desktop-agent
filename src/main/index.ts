@@ -43,13 +43,20 @@ import { TraceStepInput } from '../core/trace/trace-types'
 import { ExperienceStore, NewExperienceCard } from '../core/memory/experience-store'
 import { induceCardsFromSession } from '../core/memory/learn-from-session'
 import { SentimentClassifier, ensurePythonDeps, checkPythonInstalled, ensureScriptsCopied } from '../core/sentiment/classifier'
-import { ModelConfig, ReplyMode, SpecificObject } from '../core/types'
+import { ModelConfig, ModelCapability, ReplyMode, SpecificObject } from '../core/types'
 import { spawn as spawnChild, ChildProcess } from 'child_process'
 import { randomUUID } from 'crypto'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 
 const FIXED_ARK_MODEL = 'doubao-seed-2-0-lite-260215'
 const FIXED_ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+
+const PROVIDER_PRESETS = [
+  { id: 'volcengine-ark', name: '火山方舟', defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-0-lite-260215', defaultCapabilities: ['text', 'vision'] },
+  { id: 'openai', name: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o', defaultCapabilities: ['text', 'vision'] },
+  { id: 'deepseek', name: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', defaultCapabilities: ['text'] },
+  { id: 'custom', name: '自定义', defaultBaseURL: '', defaultModel: '', defaultCapabilities: ['text'] }
+]
 
 interface PerAppCapture {
   strategy: CaptureStrategy
@@ -188,7 +195,7 @@ function getExperienceStore(): ExperienceStore {
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 650,
+    width: 600,
     height: 700,
     minWidth: 360,
     minHeight: 500,
@@ -609,6 +616,9 @@ app.whenReady().then(async () => {
     const modelName = typeof input?.modelName === 'string' ? input.modelName.trim() : ''
     const apiKey = typeof input?.apiKey === 'string' ? input.apiKey : ''
     const baseURL = typeof input?.baseURL === 'string' ? input.baseURL : ''
+    const capabilities: ModelCapability[] = Array.isArray(input?.capabilities)
+      ? input.capabilities.filter((c: any) => typeof c === 'string') as ModelCapability[]
+      : ['text']
 
     if (!name) return { success: false, error: '模型名称不能为空' }
     if (!modelName) return { success: false, error: '模型标识不能为空' }
@@ -625,6 +635,7 @@ app.whenReady().then(async () => {
       modelName,
       apiKey,
       baseURL,
+      capabilities,
       createdAt: Date.now()
     }
 
@@ -654,6 +665,7 @@ app.whenReady().then(async () => {
     if (typeof input?.modelName === 'string' && input.modelName.trim()) updated.modelName = input.modelName.trim()
     if (typeof input?.apiKey === 'string') updated.apiKey = input.apiKey
     if (typeof input?.baseURL === 'string') updated.baseURL = input.baseURL
+    if (Array.isArray(input?.capabilities)) updated.capabilities = input.capabilities.filter((c: any) => typeof c === 'string')
 
     const nextModels = [...settings.models]
     nextModels[index] = updated
@@ -688,10 +700,11 @@ app.whenReady().then(async () => {
     if (!model) return { success: false, error: '模型不存在' }
     if (!model.apiKey) return { success: false, error: 'API Key 不能为空' }
 
+    const providerPreset = PROVIDER_PRESETS.find((p) => p.id === model.provider)
     const client = new AIClient({
       apiKey: model.apiKey,
       model: model.modelName,
-      baseURL: model.baseURL || FIXED_ARK_BASE_URL
+      baseURL: model.baseURL || providerPreset?.defaultBaseURL || FIXED_ARK_BASE_URL
     })
     return client.testConnection()
   })
@@ -925,8 +938,9 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('memory:learnFromSession', async (_event, sessionId: string) => {
     try {
-      const apiKey = normalizeSettings(settingsStore.store).vision.apiKey
-      if (!apiKey) {
+      const settings = normalizeSettings(settingsStore.store)
+      const visionModel = resolveModelConfig(settings, settings.globalVisionModelId, 'vision')
+      if (!visionModel.apiKey) {
         return { success: false, error: '请先在设置中填写视觉接口密钥' }
       }
       const data = await readTraceSession(worktraceBaseDir(), sessionId)
@@ -934,11 +948,10 @@ app.whenReady().then(async () => {
         return { success: false, error: '该轨迹暂无可学习的步骤' }
       }
 
-      const visionSettings = normalizeSettings(settingsStore.store).vision
       const client = new AIClient({
-        apiKey,
-        model: visionSettings.model,
-        baseURL: visionSettings.baseURL
+        apiKey: visionModel.apiKey,
+        model: visionModel.modelName,
+        baseURL: visionModel.baseURL
       })
       const induced = await induceCardsFromSession(client, data.session, data.steps)
       if (induced.length === 0) {
@@ -1010,8 +1023,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('engine:updateConfig', async (_event, config) => {
     const settings = normalizeSettings(config || settingsStore.store)
     if (runtimeDevice) {
-      // setApiKey 在 BoxSelectDevice 上是 no-op，对 RPADevice 才生效。
-      runtimeDevice.setApiKey(settings.vision.apiKey)
+      const visionModel = resolveModelConfig(settings, settings.globalVisionModelId, 'vision')
+      runtimeDevice.setApiKey(visionModel.apiKey, visionModel.modelName, visionModel.baseURL)
       runtimeDevice.setAppType(settings.appType)
     }
     if (runtimeInstances.size > 0) {
@@ -1227,10 +1240,11 @@ app.whenReady().then(async () => {
 
   // ── 测试入口：VLM 并行 vs 串行 ──
   ipcMain.handle('test:vlm-parallel', async () => {
-    const apiKey = normalizeSettings(settingsStore.store).vision.apiKey
-    if (!apiKey) return { error: '请先在设置中填写视觉接口密钥' }
+    const settings = normalizeSettings(settingsStore.store)
+    const visionModel = resolveModelConfig(settings, settings.globalVisionModelId, 'vision')
+    if (!visionModel.apiKey) return { error: '请先在设置中填写视觉接口密钥' }
     const { runVlmParallelTest } = await import('../core/rpa/tests/test-vlm-parallel')
-    return await runVlmParallelTest(apiKey, 'wechat')
+    return await runVlmParallelTest(visionModel.apiKey, visionModel.modelName, visionModel.baseURL, 'wechat')
   })
 
   // ── Skill HTTP Server（OpenClaw 远程启动 / 暂停接入点） ──
@@ -1287,7 +1301,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
     if (!settings.chatProvider.installed) {
       const loaded = await loadBuiltinDoubaoProvider({
         ...settings.chatProvider.config,
-        apiKey: visionModel.apiKey,
+        apiKey: replyModel.apiKey || visionModel.apiKey,
         model: replyModel.modelName || settings.chatProvider.config?.model,
         baseURL: replyModel.baseURL || settings.chatProvider.config?.baseURL
       })
@@ -1311,7 +1325,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
       }
 
       const effectiveConfig = isDoubao
-        ? { ...settings.chatProvider.config, apiKey: visionModel.apiKey, model: replyModel.modelName || settings.chatProvider.config?.model, baseURL: replyModel.baseURL || settings.chatProvider.config?.baseURL }
+        ? { ...settings.chatProvider.config, apiKey: replyModel.apiKey || visionModel.apiKey, model: replyModel.modelName || settings.chatProvider.config?.model, baseURL: replyModel.baseURL || settings.chatProvider.config?.baseURL }
         : settings.chatProvider.config
 
       const loaded = await loadInstalledProvider(settings.chatProvider.installed, effectiveConfig)
@@ -1328,7 +1342,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
     let device: DesktopDevice
     let strategy: CaptureStrategy
     try {
-      const built = await buildDevice(appType, settings, visionModel.apiKey, log)
+      const built = await buildDevice(appType, settings, visionModel.apiKey, log, visionModel.modelName, visionModel.baseURL)
       device = built.device
       strategy = built.strategy
     } catch (err: any) {
@@ -1373,8 +1387,9 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
     const allModes = ensureSystemModes(settings.modes)
     const targetMode = allModes.find((m) => m.id === effectiveModeId)
     const modeNeedsSentiment = targetMode?.sentimentEnabled === true
+    const replyModelNeedsText = !(replyModel.capabilities || []).includes('vision')
 
-    if (modeNeedsSentiment) {
+    if (modeNeedsSentiment || replyModelNeedsText) {
       try {
         const textExtractClient = new AIClient({
           apiKey: visionModel.apiKey,
@@ -1382,21 +1397,28 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
           baseURL: visionModel.baseURL
         })
 
-        sentimentClassifier = new SentimentClassifier()
-        const scriptDir = ensureScriptsCopied(app.getAppPath(), app.getPath('userData'))
-        await sentimentClassifier.start(
-          scriptDir,
-          sentimentModelDir(),
-          app.getPath('userData')
-        )
-
         extractChatTextFn = (screenshot) => textExtractClient.extractChatText(screenshot)
-        classifySentimentFn = (text) => sentimentClassifier!.classify(text)
 
-        log('thinking', '情感分析模块已就绪 ✓')
+        if (modeNeedsSentiment) {
+          sentimentClassifier = new SentimentClassifier()
+          const scriptDir = ensureScriptsCopied(app.getAppPath(), app.getPath('userData'))
+          await sentimentClassifier.start(
+            scriptDir,
+            sentimentModelDir(),
+            app.getPath('userData')
+          )
+
+          classifySentimentFn = (text) => sentimentClassifier!.classify(text)
+
+          log('thinking', '情感分析模块已就绪 ✓')
+        }
+
+        if (replyModelNeedsText && !modeNeedsSentiment) {
+          log('thinking', '回复模型不支持视觉，已启用文本提取模式')
+        }
       } catch (error: any) {
-        console.error('[Main] 情感分析模块启动失败:', error?.message || error)
-        log('thinking', '情感分析模块启动失败，将跳过情感分析')
+        console.error('[Main] 文本提取/情感分析模块启动失败:', error?.message || error)
+        log('thinking', '文本提取模块启动失败，将跳过文本提取')
         sentimentClassifier = null
       }
     } else {
@@ -1407,7 +1429,9 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
       appType,
       channel,
       provider,
-      initialState: createInitialGenericChannelState(),
+      initialState: createInitialGenericChannelState(
+        (replyModel.capabilities || []).includes('vision')
+      ),
       onLog: log,
       onTrace,
       getMemoryCards: () => getExperienceStore().getActiveCardBriefs(),
@@ -1501,7 +1525,12 @@ function resolveModelConfig(
   if (globalModelId) {
     const found = settings.models.find((m) => m.id === globalModelId)
     if (found) {
-      return { apiKey: found.apiKey, modelName: found.modelName, baseURL: found.baseURL }
+      const providerPreset = PROVIDER_PRESETS.find((p) => p.id === found.provider)
+      return {
+        apiKey: found.apiKey,
+        modelName: found.modelName,
+        baseURL: found.baseURL || providerPreset?.defaultBaseURL || FIXED_ARK_BASE_URL
+      }
     }
   }
   return {
@@ -1520,6 +1549,10 @@ async function stopEngineCore(stopReason: string, modeId?: string): Promise<Skil
     try {
       await rt.stopSession(stopReason)
       runtimeInstances.delete(modeId)
+      if (runtimeInstances.size === 0 && sentimentClassifier) {
+        sentimentClassifier.stop()
+        sentimentClassifier = null
+      }
       notifyEngineStateChanged(runtimeInstances.size > 0 ? 'running' : 'idle')
       notifyModeRunningChanged(modeId, false)
       return { ok: true }
@@ -1613,7 +1646,9 @@ async function buildDevice(
   appType: AppType,
   settings: AppSettings,
   apiKey: string,
-  log: (type: 'thinking' | 'reply' | 'skip' | 'error', content: string) => void
+  log: (type: 'thinking' | 'reply' | 'skip' | 'error', content: string) => void,
+  modelName?: string,
+  baseURL?: string
 ): Promise<{ device: DesktopDevice; strategy: CaptureStrategy }> {
   const perApp = settings.capture[appType] ?? { strategy: 'auto' as CaptureStrategy, regions: null }
   const effective = resolveSettingsStrategy(appType, settings)
@@ -1621,7 +1656,7 @@ async function buildDevice(
   if (effective === 'vlm') {
     const rpa = new RPADevice()
     rpa.setAppType(appType)
-    rpa.setApiKey(apiKey)
+    rpa.setApiKey(apiKey, modelName, baseURL)
     return { device: rpa, strategy: 'vlm' }
   }
 
@@ -1783,7 +1818,12 @@ function normalizeSettings(raw: any): AppSettings {
 function normalizeModels(raw: unknown, fallbackVision: { apiKey: string; model: string; baseURL: string }): ModelConfig[] {
   if (Array.isArray(raw)) {
     const valid = raw.filter((m: any) => m && typeof m === 'object' && typeof m.id === 'string' && m.id)
-    if (valid.length > 0) return valid as ModelConfig[]
+    if (valid.length > 0) {
+      return valid.map((m: any) => ({
+        ...m,
+        capabilities: Array.isArray(m.capabilities) ? m.capabilities : ['text']
+      })) as ModelConfig[]
+    }
   }
 
   if (fallbackVision.apiKey) {
@@ -1794,6 +1834,7 @@ function normalizeModels(raw: unknown, fallbackVision: { apiKey: string; model: 
       modelName: fallbackVision.model,
       apiKey: fallbackVision.apiKey,
       baseURL: fallbackVision.baseURL,
+      capabilities: ['text', 'vision'],
       createdAt: Date.now()
     }]
   }

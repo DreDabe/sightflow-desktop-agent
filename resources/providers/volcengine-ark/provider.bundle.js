@@ -43,11 +43,22 @@ export function createProvider(context) {
       }
 
       try {
+        const isTextMode = !!input.extractedText
+        let basePrompt = providerConfig.systemPrompt || DEFAULT_PROMPT
+        if (isTextMode) {
+          basePrompt = basePrompt
+            .replace(/你会收到一张微信\/企业微信的聊天窗口截图。/, '你会收到对方发送的聊天内容文本。')
+            .replace(/分析截图中的聊天内容/, '分析聊天内容')
+            .replace(/仔细观察截图。聊天窗口中，右侧的气泡是"我"发送的。如果最后一条消息是右侧气泡，必须输出 \[SKIP\]/, '如果最后一条消息是"我"发送的（文本中标注为"我："或"自己："），必须输出 [SKIP]')
+            .replace(/截图/g, '聊天内容')
+        }
         const reply = await requestReply({
           screenshot: input.screenshot,
+          extractedText: input.extractedText,
           apiKey,
           model: providerConfig.model || DEFAULT_MODEL,
-          systemPrompt: (providerConfig.systemPrompt || DEFAULT_PROMPT) + memorySection,
+          baseURL: providerConfig.baseURL || DEFAULT_BASE_URL,
+          systemPrompt: basePrompt + memorySection,
           sentimentSection
         })
 
@@ -68,25 +79,30 @@ export function createProvider(context) {
   }
 }
 
-async function requestReply({ screenshot, apiKey, model, systemPrompt, sentimentSection }) {
-  const userText = '请根据截图中微信聊天窗口的最新消息进行回复。' + (sentimentSection || '')
+async function requestReply({ screenshot, extractedText, apiKey, model, baseURL, systemPrompt, sentimentSection }) {
+  const effectiveBaseURL = baseURL || DEFAULT_BASE_URL
+  let userContent
+  if (extractedText) {
+    userContent = [
+      { type: 'text', text: `以下是对方发送的聊天内容：\n${extractedText}\n\n请根据以上聊天内容进行回复。${sentimentSection || ''}` }
+    ]
+  } else {
+    userContent = [
+      { type: 'image_url', image_url: { url: normalizeImageUrl(screenshot) } },
+      { type: 'text', text: '请根据截图中微信聊天窗口的最新消息进行回复。' + (sentimentSection || '') }
+    ]
+  }
   const body = {
     model,
     messages: [
       { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: normalizeImageUrl(screenshot) } },
-          { type: 'text', text: userText }
-        ]
-      }
+      { role: 'user', content: userContent }
     ],
     thinking: { type: 'disabled' },
     stream: false
   }
 
-  const response = await fetch(`${DEFAULT_BASE_URL}/chat/completions`, {
+  const response = await fetch(`${effectiveBaseURL}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -96,7 +112,14 @@ async function requestReply({ screenshot, apiKey, model, systemPrompt, sentiment
   })
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+    const errorBody = await response.text().catch(() => '')
+    let hint = ''
+    if (response.status === 401) {
+      hint = '（API Key 无效或与目标端点不匹配，请检查模型配置中的 API Key 和 Base URL 是否对应同一供应商）'
+    } else if (response.status === 400 && errorBody.includes('image_url')) {
+      hint = '（当前模型不支持图片输入，请更换为支持视觉能力的模型）'
+    }
+    throw new Error(`API request failed: ${response.status} ${response.statusText}${hint ? ' ' + hint : ''} - ${errorBody.slice(0, 200)}`)
   }
 
   const json = await response.json()

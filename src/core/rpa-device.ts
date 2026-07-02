@@ -37,9 +37,9 @@ export class RPADevice implements DesktopDevice {
     this.appType = appType
   }
 
-  setApiKey(apiKey: string): void {
+  setApiKey(apiKey: string, model?: string, baseURL?: string): void {
     if (!apiKey) return
-    this.aiClient = new AIClient({ apiKey })
+    this.aiClient = new AIClient({ apiKey, model: model || undefined, baseURL: baseURL || undefined })
   }
 
   // ── 生命周期 ──

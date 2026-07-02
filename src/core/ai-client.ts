@@ -191,18 +191,28 @@ export class AIClient {
       ? rawBase64
       : `data:image/png;base64,${rawBase64}`
 
-    const data = await this.callAPI([
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: imageUrl } },
-          { type: 'text', text: userText }
-        ]
-      }
-    ])
+    try {
+      const data = await this.callAPI([
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageUrl } },
+            { type: 'text', text: userText }
+          ]
+        }
+      ])
 
-    return this.extractText(data)
+      return this.extractText(data)
+    } catch (error: any) {
+      const msg = error?.message || ''
+      if (msg.includes('image_url') || msg.includes('image') && msg.includes('variant')) {
+        throw new Error(
+          `当前模型 (${this.config.model}) 不支持图片输入，请更换为支持视觉能力的模型（如 doubao-seed-2-0-lite-260215、gpt-4o 等）。原始错误: ${msg}`
+        )
+      }
+      throw error
+    }
   }
 
   /**

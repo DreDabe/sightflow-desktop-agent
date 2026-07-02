@@ -18,9 +18,12 @@ export interface GenericChannelState {
   currentModePrompt: string | null
   currentModeSentimentEnabled: boolean
   currentModeUnifiedPrefix: string
+  replyModelHasVision: boolean
 }
 
-export function createInitialGenericChannelState(): GenericChannelState {
+export function createInitialGenericChannelState(
+  replyModelHasVision = true
+): GenericChannelState {
   return {
     measuredAt: null,
     latestChatBaseline: null,
@@ -29,7 +32,8 @@ export function createInitialGenericChannelState(): GenericChannelState {
     currentModeAutoReply: true,
     currentModePrompt: null,
     currentModeSentimentEnabled: false,
-    currentModeUnifiedPrefix: ''
+    currentModeUnifiedPrefix: '',
+    replyModelHasVision
   }
 }
 
@@ -272,32 +276,39 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
   ): Promise<void> {
     try {
       let sentimentResult: SentimentResult | undefined
-      if (ctx.state.currentModeSentimentEnabled && ctx.host.extractChatText && ctx.host.classifySentiment) {
+      let extractedText: string | undefined
+
+      const needExtractText = !ctx.state.replyModelHasVision || ctx.state.currentModeSentimentEnabled
+      if (needExtractText && ctx.host.extractChatText) {
         try {
           ctx.host.log('thinking', '正在提取聊天文本...')
-          const extractedText = await ctx.host.extractChatText(screenshot)
-          if (extractedText) {
-            ctx.host.log('thinking', '正在进行情感分析...')
-            sentimentResult = await ctx.host.classifySentiment(extractedText)
-            const maxProb = Math.max(...(sentimentResult.probabilities || []))
-            if (sentimentResult.classIndex === 0) {
-              ctx.host.log('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），无需情感关怀`)
-            } else {
-              ctx.host.log('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），将注入情感关怀指令`)
+          const text = await ctx.host.extractChatText(screenshot)
+          if (text) {
+            extractedText = text
+            if (ctx.state.currentModeSentimentEnabled && ctx.host.classifySentiment) {
+              ctx.host.log('thinking', '正在进行情感分析...')
+              sentimentResult = await ctx.host.classifySentiment(text)
+              const maxProb = Math.max(...(sentimentResult.probabilities || []))
+              if (sentimentResult.classIndex === 0) {
+                ctx.host.log('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），无需情感关怀`)
+              } else {
+                ctx.host.log('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），将注入情感关怀指令`)
+              }
             }
           } else {
-            ctx.host.log('thinking', '未提取到聊天文本，跳过情感分析')
+            ctx.host.log('thinking', '未提取到聊天文本')
           }
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error)
-          ctx.host.log('error', `情感分析失败：${msg}`)
+          ctx.host.log('error', `文本提取/情感分析失败：${msg}`)
         }
       }
 
       for await (const event of ctx.host.runProvider({
         screenshot,
         appType: ctx.appType,
-        ...(sentimentResult ? { sentimentResult } : {})
+        ...(sentimentResult ? { sentimentResult } : {}),
+        ...(extractedText ? { extractedText } : {})
       })) {
         if (!ctx.host.isRunning()) break
 

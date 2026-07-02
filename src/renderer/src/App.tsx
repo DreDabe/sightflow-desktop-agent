@@ -139,6 +139,8 @@ interface ReplyMode {
   updatedAt: number
 }
 
+type ModelCapability = 'text' | 'vision' | 'audio'
+
 interface ModelConfig {
   id: string
   name: string
@@ -146,14 +148,15 @@ interface ModelConfig {
   modelName: string
   apiKey: string
   baseURL: string
+  capabilities: ModelCapability[]
   createdAt: number
 }
 
 const PROVIDER_PRESETS = [
-  { id: 'volcengine-ark', name: '火山方舟 (Volcengine Ark)', defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-0-lite-260215' },
-  { id: 'openai', name: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
-  { id: 'deepseek', name: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
-  { id: 'custom', name: '自定义', defaultBaseURL: '', defaultModel: '' }
+  { id: 'volcengine-ark', name: '火山方舟 (Volcengine Ark)', defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-0-lite-260215', defaultCapabilities: ['text', 'vision'] as ModelCapability[] },
+  { id: 'openai', name: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o', defaultCapabilities: ['text', 'vision'] as ModelCapability[] },
+  { id: 'deepseek', name: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', defaultCapabilities: ['text'] as ModelCapability[] },
+  { id: 'custom', name: '自定义', defaultBaseURL: '', defaultModel: '', defaultCapabilities: ['text'] as ModelCapability[] }
 ]
 
 const BUILTIN_PROVIDER_CATALOG: ProviderCatalogItem[] = [
@@ -332,9 +335,9 @@ function App() {
       const targetModeId = data.modeId || activeModeId
       if (!targetModeId) return
       updateModeState(targetModeId, { recommendedReply: '' })
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         updateModeState(targetModeId, { recommendedReply: data.text })
-      })
+      }, 50)
     })
     return cleanup
   }, [activeModeId, updateModeState])
@@ -952,7 +955,8 @@ function SettingsPanel() {
               await window.electron?.invoke('settings:set', { globalVisionModelId: id })
             }}
           >
-            {models.map((m) => (
+            <option value="">请选择视觉模型</option>
+            {models.filter((m) => (m.capabilities || []).includes('vision')).map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
             ))}
           </select>
@@ -970,7 +974,8 @@ function SettingsPanel() {
               await window.electron?.invoke('settings:set', { globalReplyModelId: id })
             }}
           >
-            {models.map((m) => (
+            <option value="">请选择回复模型</option>
+            {models.filter((m) => (m.capabilities || []).includes('text')).map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
             ))}
           </select>
@@ -1168,7 +1173,36 @@ function ModelConfigPanel(): React.JSX.Element {
               return (
                 <div key={model.id} className="provider-card" style={{ cursor: 'default' }}>
                   <div className="provider-card-top">
-                    <span className="provider-name">{model.name}</span>
+                    <span className="provider-name">
+                      {model.name}
+                      {(model.capabilities || []).map((cap) => {
+                        const capMeta: Record<string, { label: string; color: string }> = {
+                          text: { label: '文本', color: '#3b82f6' },
+                          vision: { label: '视觉', color: '#10b981' },
+                          audio: { label: '语音', color: '#f59e0b' }
+                        }
+                        const meta = capMeta[cap]
+                        if (!meta) return null
+                        return (
+                          <span
+                            key={cap}
+                            style={{
+                              display: 'inline-block',
+                              marginLeft: 6,
+                              padding: '1px 6px',
+                              borderRadius: 8,
+                              fontSize: 10,
+                              background: meta.color + '22',
+                              color: meta.color,
+                              border: `1px solid ${meta.color}44`,
+                              verticalAlign: 'middle'
+                            }}
+                          >
+                            {meta.label}
+                          </span>
+                        )
+                      })}
+                    </span>
                     <span className="provider-version" style={{ color: '#94a3b8' }}>
                       {preset?.name || model.provider}
                     </span>
@@ -1233,6 +1267,7 @@ function ModelEditModal({
   const [modelName, setModelName] = useState(model?.modelName || '')
   const [apiKey, setApiKey] = useState(model?.apiKey || '')
   const [baseURL, setBaseURL] = useState(model?.baseURL || '')
+  const [capabilities, setCapabilities] = useState<ModelCapability[]>(model?.capabilities || ['text'])
 
   useEffect(() => {
     if (!isEdit) {
@@ -1240,6 +1275,7 @@ function ModelEditModal({
       if (preset) {
         setModelName(preset.defaultModel)
         setBaseURL(preset.defaultBaseURL)
+        setCapabilities([...preset.defaultCapabilities])
       }
     }
   }, [provider, isEdit])
@@ -1249,7 +1285,7 @@ function ModelEditModal({
     if (!apiKey.trim()) { showToast('API Key 不能为空', 'error'); return }
 
     const displayName = name.trim() || modelName.trim()
-    const input = { name: displayName, provider, modelName: modelName.trim(), apiKey, baseURL }
+    const input = { name: displayName, provider, modelName: modelName.trim(), apiKey, baseURL, capabilities }
     const result = isEdit
       ? await window.electron?.invoke('model:update', model!.id, input)
       : await window.electron?.invoke('model:create', input)
@@ -1260,7 +1296,7 @@ function ModelEditModal({
     } else {
       showToast(result?.error || '操作失败', 'error')
     }
-  }, [name, provider, modelName, apiKey, baseURL, isEdit, model, onSaved])
+  }, [name, provider, modelName, apiKey, baseURL, capabilities, isEdit, model, onSaved])
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -1307,6 +1343,45 @@ function ModelEditModal({
           <label className="form-label">Base URL</label>
           <input className="form-input" value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
           <div className="form-hint">API 端点地址，选择供应商后会自动填充</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">模型能力</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {([
+              { key: 'text' as ModelCapability, label: '文本', color: '#3b82f6' },
+              { key: 'vision' as ModelCapability, label: '视觉', color: '#10b981' },
+              { key: 'audio' as ModelCapability, label: '语音', color: '#f59e0b' }
+            ]).map((cap) => {
+              const active = capabilities.includes(cap.key)
+              return (
+                <button
+                  key={cap.key}
+                  type="button"
+                  onClick={() => {
+                    setCapabilities((prev) =>
+                      prev.includes(cap.key)
+                        ? prev.filter((c) => c !== cap.key)
+                        : [...prev, cap.key]
+                    )
+                  }}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: 12,
+                    fontSize: 12,
+                    border: `1.5px solid ${active ? cap.color : '#475569'}`,
+                    background: active ? cap.color : 'transparent',
+                    color: active ? '#fff' : '#94a3b8',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {cap.label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="form-hint">点击选择该模型支持的能力，至少选择"文本"</div>
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>

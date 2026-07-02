@@ -11,6 +11,8 @@ export interface ProviderInput {
   memoryCards?: MemoryCardBrief[]
   /** 情感分类结果。Provider 可拼入 user prompt 实现情感关怀。 */
   sentimentResult?: SentimentResult
+  /** 从截图中提取的聊天文本。当回复模型不支持视觉时，用此替代截图。 */
+  extractedText?: string
 }
 
 export type ProviderEvent =
