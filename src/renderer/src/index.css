@@ -1104,6 +1104,11 @@ textarea.form-input {
   box-shadow: 0 0 6px rgba(96, 165, 250, 0.5);
 }
 
+.mode-status-dot.standby {
+  background: #f87171;
+  box-shadow: 0 0 6px rgba(248, 113, 113, 0.5);
+}
+
 .main-sidebar-divider {
   height: 1px;
   background: var(--glass-border);

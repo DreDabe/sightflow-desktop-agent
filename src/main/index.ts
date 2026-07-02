@@ -528,6 +528,15 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
+  ipcMain.handle('engine:exitStandby', async (_event, modeId: string) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false }
+    const rt = runtimeInstances.get(modeId)
+    if (rt?.isRunning()) {
+      rt.forceExitStandby()
+    }
+    return { success: true }
+  })
+
   ipcMain.handle('provider:installFromUrl', async (_event, manifestUrl: string) => {
     try {
       const result = await installProviderFromUrl(manifestUrl)
@@ -1495,6 +1504,13 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
           }
         }
         return null
+      },
+      onStandbyChange: (standby: boolean) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('engine:standbyChanged', { modeId: effectiveModeId, standby })
+          }
+        }
       }
     })
 

@@ -274,6 +274,7 @@ function App() {
   const [runningModeIds, setRunningModeIds] = useState<Set<string>>(new Set())
   const [modeStates, setModeStates] = useState<Map<string, ModeState>>(new Map())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [standbyModeId, setStandbyModeId] = useState<string | null>(null)
 
   const getModeState = useCallback((modeId: string): ModeState => {
     return modeStates.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
@@ -342,6 +343,13 @@ function App() {
     return cleanup
   }, [activeModeId, updateModeState])
 
+  useEffect(() => {
+    const cleanup = window.electron?.on('engine:standbyChanged', (data: { modeId: string; standby: boolean }) => {
+      setStandbyModeId(data.standby ? data.modeId : null)
+    })
+    return cleanup
+  }, [])
+
   const loadModes = useCallback(async () => {
     const list = (await window.electron?.invoke('mode:list')) as ReplyMode[]
     setModes(list || [])
@@ -399,7 +407,7 @@ function App() {
               onClick={() => setActiveModeId(mode.id)}
               title={mode.name}
             >
-              <span className={`mode-status-dot ${runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
+              <span className={`mode-status-dot ${standbyModeId === mode.id ? 'standby' : runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
               {!sidebarCollapsed && <span className="main-sidebar-item-name">{mode.name}</span>}
             </button>
           ))}
@@ -441,7 +449,7 @@ function App() {
 
       <main className="main-content">
         {activeMode ? (
-          <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} />
+          <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeId={standbyModeId} />
         ) : (
           <div className="main-content-empty">
             <p>请从左侧选择一个模式，或添加新的自定义模式</p>
@@ -465,12 +473,14 @@ function ModeSubInterface({
   mode,
   modeState,
   updateModeState,
-  onModesChanged
+  onModesChanged,
+  standbyModeId
 }: {
   mode: ReplyMode
   modeState: ModeState
   updateModeState: (patch: Partial<ModeState>) => void
   onModesChanged: () => void
+  standbyModeId: string | null
 }): React.JSX.Element {
   const [modeData, setModeData] = useState(mode)
   const [appType, setAppType] = useState<AppType>('wechat')
@@ -550,15 +560,22 @@ function ModeSubInterface({
     }
   }, [modeData, onModesChanged])
 
-  const handlePaste = useCallback(async () => {
-    if (!recommendedReply) return
-    await window.electron?.invoke('reply:paste', recommendedReply)
-  }, [recommendedReply])
-
   const handleSend = useCallback(async () => {
     if (!recommendedReply) return
     await window.electron?.invoke('reply:send', recommendedReply)
-  }, [recommendedReply])
+    await window.electron?.invoke('engine:exitStandby', mode.id)
+  }, [recommendedReply, mode.id])
+
+  const handlePaste = useCallback(async () => {
+    if (!recommendedReply) return
+    await window.electron?.invoke('reply:paste', recommendedReply)
+    await window.electron?.invoke('engine:exitStandby', mode.id)
+  }, [recommendedReply, mode.id])
+
+  const handleSkip = useCallback(async () => {
+    await window.electron?.invoke('engine:exitStandby', mode.id)
+    showToast('已跳过本次推荐回复', 'success')
+  }, [mode.id])
 
   const running = modeRunning
   const starting = modeStarting
@@ -676,7 +693,11 @@ function ModeSubInterface({
         <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
           <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handlePaste}>一键粘贴</button>
           <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>一键回复</button>
+          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handleSkip}>一键跳过</button>
         </div>
+        {standbyModeId === modeData.id && (
+          <div style={{ textAlign: 'center', color: '#f59e0b', fontSize: 11, marginTop: 4 }}>待机中</div>
+        )}
       </div>
 
       <div className="card card-fixed-194">

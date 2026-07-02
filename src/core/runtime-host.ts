@@ -27,6 +27,7 @@ interface RuntimeHostOptions<TState> {
   identifyContact?: (screenshot: string) => Promise<string>
   resolveMode?: (contactName: string) => { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
   onSetAutoReply?: (autoReply: boolean) => void
+  onStandbyChange?: (standby: boolean) => void
 }
 
 export class RuntimeHost<TState> {
@@ -117,7 +118,22 @@ export class RuntimeHost<TState> {
       recommendReply: (text: string) => this.options.onRecommendReply?.(text),
       identifyContact: (screenshot: string) => this.options.identifyContact?.(screenshot) ?? Promise.resolve(''),
       resolveMode: (contactName: string) => this.options.resolveMode?.(contactName) ?? null,
-      setAutoReply: (autoReply: boolean) => this.options.onSetAutoReply?.(autoReply)
+      setAutoReply: (autoReply: boolean) => this.options.onSetAutoReply?.(autoReply),
+      notifyStandby: (standby: boolean) => this.options.onStandbyChange?.(standby),
+      exitStandby: () => this.forceExitStandby()
+    }
+  }
+
+  forceExitStandby(): void {
+    if (!this.running || !this.context) return
+    const state = this.context.state as any
+    if (state && 'standby' in state && state.standby) {
+      state.standby = false
+      state.standbySince = null
+      state.standbyRetryCount = 0
+      state.consecutiveNoChangeRounds = 0
+      this.log('thinking', '用户操作，退出待机状态')
+      this.options.onStandbyChange?.(false)
     }
   }
 

@@ -19,6 +19,11 @@ export interface GenericChannelState {
   currentModeSentimentEnabled: boolean
   currentModeUnifiedPrefix: string
   replyModelHasVision: boolean
+  standby: boolean
+  standbySince: number | null
+  standbyRetryCount: number
+  lastExtractedText: string | null
+  consecutiveNoChangeRounds: number
 }
 
 export function createInitialGenericChannelState(
@@ -33,12 +38,19 @@ export function createInitialGenericChannelState(
     currentModePrompt: null,
     currentModeSentimentEnabled: false,
     currentModeUnifiedPrefix: '',
-    replyModelHasVision
+    replyModelHasVision,
+    standby: false,
+    standbySince: null,
+    standbyRetryCount: 0,
+    lastExtractedText: null,
+    consecutiveNoChangeRounds: 0
   }
 }
 
 export class GenericChannelSession implements ChannelSession<GenericChannelState> {
   private readonly retryDelayMs = 5000
+  private readonly standbyThreshold = 2
+  private readonly maxStandbyDelayMs = 60000
   private consecutiveUnreadFailures = 0
 
   constructor(private readonly device: DesktopDevice) {}
@@ -152,6 +164,7 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
         ctx.host.recommendReply(replyText)
         const autoReply = ctx.state.currentModeAutoReply
         if (autoReply) {
+          ctx.state.consecutiveNoChangeRounds = 0
           const sendStart = Date.now()
           await this.device.sendMessage(replyText)
           ctx.host.log('reply', replyText)
@@ -162,6 +175,7 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
             outcome: { status: 'ok', latencyMs: Date.now() - sendStart }
           })
         } else {
+          ctx.state.consecutiveNoChangeRounds += 1
           ctx.host.log('reply', `[推荐回复] ${replyText}`)
           ctx.host.trace({
             phase: 'act',
@@ -204,6 +218,37 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
 
       case 'check_unread': {
         const diffResult = await this.device.hasChatAreaChanged()
+
+        if (ctx.state.standby) {
+          if (diffResult.hasDiff) {
+            if (ctx.host.extractChatText && ctx.state.lastExtractedText) {
+              try {
+                const screenshot = await this.device.screenshot()
+                const currentText = await ctx.host.extractChatText(screenshot)
+                if (currentText && currentText.trim() !== ctx.state.lastExtractedText.trim()) {
+                  ctx.host.log('thinking', '检测到对话内容有变化，退出待机状态')
+                  this.exitStandby(ctx)
+                  ctx.host.enqueue({ type: 'observe_chat' })
+                  break
+                } else {
+                  ctx.host.log('skip', '像素变化但对话内容未变，继续待机')
+                }
+              } catch {
+                ctx.host.log('skip', '文本提取失败，继续待机')
+              }
+            } else {
+              ctx.host.log('thinking', '检测到对话有变化，退出待机状态')
+              this.exitStandby(ctx)
+              ctx.host.enqueue({ type: 'observe_chat' })
+              break
+            }
+          }
+          ctx.state.standbyRetryCount += 1
+          const delay = this.getStandbyDelay(ctx.state.standbyRetryCount)
+          ctx.host.enqueue({ type: 'wait_retry', reason: 'standby', delayMs: delay })
+          break
+        }
+
         if (diffResult.hasDiff) {
           ctx.host.log('thinking', '检测到当前对话有新消息')
           ctx.host.trace({
@@ -212,6 +257,12 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
             outcome: { status: 'ok' }
           })
           ctx.host.enqueue({ type: 'observe_chat' })
+          break
+        }
+
+        if (!ctx.state.currentModeAutoReply && ctx.state.consecutiveNoChangeRounds >= this.standbyThreshold) {
+          this.enterStandby(ctx)
+          ctx.host.enqueue({ type: 'wait_retry', reason: 'standby', delayMs: this.retryDelayMs })
           break
         }
 
@@ -285,6 +336,7 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
           const text = await ctx.host.extractChatText(screenshot)
           if (text) {
             extractedText = text
+            ctx.state.lastExtractedText = text
             if (ctx.state.currentModeSentimentEnabled && ctx.host.classifySentiment) {
               ctx.host.log('thinking', '正在进行情感分析...')
               sentimentResult = await ctx.host.classifySentiment(text)
@@ -347,6 +399,36 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
     state.currentModePrompt = null
     state.currentModeSentimentEnabled = false
     state.currentModeUnifiedPrefix = ''
+    state.standby = false
+    state.standbySince = null
+    state.standbyRetryCount = 0
+    state.lastExtractedText = null
+    state.consecutiveNoChangeRounds = 0
+  }
+
+  private enterStandby(ctx: ChannelContext<GenericChannelState>): void {
+    if (ctx.state.standby) return
+    ctx.state.standby = true
+    ctx.state.standbySince = Date.now()
+    ctx.state.standbyRetryCount = 0
+    ctx.host.log('skip', '已进入待机状态，等待用户操作或对话变化')
+    ctx.host.notifyStandby?.(true)
+  }
+
+  private exitStandby(ctx: ChannelContext<GenericChannelState>): void {
+    if (!ctx.state.standby) return
+    ctx.state.standby = false
+    ctx.state.standbySince = null
+    ctx.state.standbyRetryCount = 0
+    ctx.state.consecutiveNoChangeRounds = 0
+    ctx.host.notifyStandby?.(false)
+  }
+
+  private getStandbyDelay(retryCount: number): number {
+    if (retryCount <= 1) return 5000
+    if (retryCount === 2) return 10000
+    if (retryCount === 3) return 20000
+    return this.maxStandbyDelayMs
   }
 
   private async tryOpenUnreadConversation(

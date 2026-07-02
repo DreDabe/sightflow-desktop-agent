@@ -11,3 +11,4 @@
 | `a1b2c3d` | feat: Phase 3 - semi-auto reply (F003) | 2026-06-30 | Phase 3 完成：半自动回复。推荐回复始终显示，自动回复由设置控制。新增 getAutoReply/recommendReply 控制方法，engine:recommendReply IPC 事件。 |
 | `e4f5g6h` | feat: Phase 4 - specific object routing (F002) | 2026-06-30 | Phase 4 完成：特定对象路由。VLM 识别联系人名称，根据特定对象匹配路由到对应模式，支持模式级 autoReply/prompt/sentiment/unifiedPrefix。 |
 | `cd8df3b` | feat: Phase 5 - multi-mode runtime management (F004) | 2026-06-30 | Phase 5 完成：多模式运行管理。全局单例 runtime 改为 Map<modeId, RuntimeHost> 多实例，新增 mode:start/mode:stop IPC，mode:runningChanged 事件，左侧菜单栏实时状态标识。 |
+| `e1fc0f8` | feat: multi-supplier model config + model capabilities + text-mode reply + standby plan docs | 2026-07-01 | 多供应商模型配置修复：Provider 使用 replyModel.apiKey、RPADevice 传递完整 model/baseURL、Provider bundle 支持 baseURL 和纯文本模式、模型能力（capabilities）字段及 UI、推荐回复先清空再填入、待机方案文档。若待机功能实现出现问题，可回退至此提交。 |

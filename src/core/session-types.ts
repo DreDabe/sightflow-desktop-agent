@@ -50,6 +50,8 @@ export interface RuntimeHostControls {
   identifyContact(screenshot: string): Promise<string>
   resolveMode(contactName: string): { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
   setAutoReply(autoReply: boolean): void
+  notifyStandby?(standby: boolean): void
+  exitStandby?(): void
 }
 
 export interface ChannelContext<TState> {
