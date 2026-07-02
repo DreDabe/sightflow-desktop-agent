@@ -20,7 +20,6 @@ import {
   clearChatBaseline as clearChatBaselineFn
 } from './rpa/image-compare'
 import {
-  clearLayoutCache,
   detectUnreadArea as detectUnreadAreaFn,
   detectWechatLayout,
   getInputAreaFromCache,

@@ -11,8 +11,10 @@ export class MockDevice implements DesktopDevice {
     // Mock 不依赖窗口类型
   }
 
-  setApiKey(_apiKey: string): void {
-    // Mock: 不需要 API key
+  setApiKey(_apiKey: string, _model?: string, _baseURL?: string): void {
+  }
+
+  setModeId(_modeId: string): void {
   }
 
   async measureLayout(): Promise<{ success: boolean; error?: string }> {

@@ -21,6 +21,8 @@ export type SkillStartReason =
   | 'engine_failed'
   | 'already_running'
   | 'wizard_cancelled'
+  | 'mode_not_found'
+  | 'default_mode_not_running'
 
 export type SkillPauseReason = 'not_running' | 'pause_failed'
 

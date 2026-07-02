@@ -1594,7 +1594,7 @@ function resolveModelConfig(
   settings: AppSettings,
   globalModelId: string,
   _role: 'vision' | 'reply'
-): { apiKey: string; modelName: string; baseURL: string } {
+): { apiKey: string; modelName: string; baseURL: string; capabilities: string[] } {
   if (globalModelId) {
     const found = settings.models.find((m) => m.id === globalModelId)
     if (found) {
@@ -1602,14 +1602,16 @@ function resolveModelConfig(
       return {
         apiKey: found.apiKey,
         modelName: found.modelName,
-        baseURL: found.baseURL || providerPreset?.defaultBaseURL || FIXED_ARK_BASE_URL
+        baseURL: found.baseURL || providerPreset?.defaultBaseURL || FIXED_ARK_BASE_URL,
+        capabilities: found.capabilities || providerPreset?.defaultCapabilities || ['text']
       }
     }
   }
   return {
     apiKey: settings.vision.apiKey,
     modelName: settings.vision.model,
-    baseURL: settings.vision.baseURL
+    baseURL: settings.vision.baseURL,
+    capabilities: ['text', 'vision']
   }
 }
 

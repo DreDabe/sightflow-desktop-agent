@@ -97,7 +97,7 @@ export class AIClient {
     const startTime = Date.now()
     try {
       console.log('[AIClient] getTextReply 开始...')
-      const replyText = await this.callText(
+      const replyText = await this.callTextInternal(
         systemPrompt,
         `请根据以下聊天内容进行回复：\n${extractedText}`
       )
@@ -185,19 +185,9 @@ export class AIClient {
   /**
    * 纯文本调用（不带图片）— 用于 testConnection 等
    */
-  async callText(userMessage: string): Promise<string> {
-    const data = await this.callAPI([
-      { role: 'user', content: userMessage }
-    ])
-    return this.extractText(data)
-  }
-
-  /**
-   * 测试 API 连接
-   */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.callText('你好，请回复"连接成功"。')
+      await this.callTextInternal('你是一个测试助手', '你好，请回复"连接成功"。')
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error?.message || String(error) }
@@ -251,7 +241,7 @@ export class AIClient {
     }
   }
 
-  private async callText(
+  private async callTextInternal(
     systemPrompt: string,
     userText: string
   ): Promise<string> {
