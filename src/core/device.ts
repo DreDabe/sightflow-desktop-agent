@@ -16,6 +16,7 @@ export interface DesktopDevice {
   // ── 配置 ──
   setAppType(appType: AppType): void
   setApiKey(apiKey: string, model?: string, baseURL?: string): void
+  setModeId(modeId: string): void
 
   // ── 生命周期 ──
   // session 启停时由 GenericChannelSession 调用，给设备机会做缓存初始化 / 清理。

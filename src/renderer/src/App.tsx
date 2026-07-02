@@ -154,6 +154,7 @@ interface ModelConfig {
 
 const PROVIDER_PRESETS = [
   { id: 'volcengine-ark', name: '火山方舟 (Volcengine Ark)', defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-0-lite-260215', defaultCapabilities: ['text', 'vision'] as ModelCapability[] },
+  { id: 'aliyun-bailian', name: '阿里云百炼 (DashScope)', defaultBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-vl-plus', defaultCapabilities: ['text', 'vision'] as ModelCapability[] },
   { id: 'openai', name: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o', defaultCapabilities: ['text', 'vision'] as ModelCapability[] },
   { id: 'deepseek', name: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', defaultCapabilities: ['text'] as ModelCapability[] },
   { id: 'custom', name: '自定义', defaultBaseURL: '', defaultModel: '', defaultCapabilities: ['text'] as ModelCapability[] }
@@ -274,7 +275,8 @@ function App() {
   const [runningModeIds, setRunningModeIds] = useState<Set<string>>(new Set())
   const [modeStates, setModeStates] = useState<Map<string, ModeState>>(new Map())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [standbyModeId, setStandbyModeId] = useState<string | null>(null)
+  const [standbyModeIds, setStandbyModeIds] = useState<Set<string>>(new Set())
+  const [pendingModeIds, setPendingModeIds] = useState<Set<string>>(new Set())
 
   const getModeState = useCallback((modeId: string): ModeState => {
     return modeStates.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
@@ -345,7 +347,30 @@ function App() {
 
   useEffect(() => {
     const cleanup = window.electron?.on('engine:standbyChanged', (data: { modeId: string; standby: boolean }) => {
-      setStandbyModeId(data.standby ? data.modeId : null)
+      setStandbyModeIds(prev => {
+        const next = new Set(prev)
+        if (data.standby) {
+          next.add(data.modeId)
+        } else {
+          next.delete(data.modeId)
+        }
+        return next
+      })
+    })
+    return cleanup
+  }, [])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('engine:pendingChanged', (data: { modeId: string; pending: boolean }) => {
+      setPendingModeIds(prev => {
+        const next = new Set(prev)
+        if (data.pending) {
+          next.add(data.modeId)
+        } else {
+          next.delete(data.modeId)
+        }
+        return next
+      })
     })
     return cleanup
   }, [])
@@ -407,8 +432,10 @@ function App() {
               onClick={() => setActiveModeId(mode.id)}
               title={mode.name}
             >
-              <span className={`mode-status-dot ${standbyModeId === mode.id ? 'standby' : runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
+              <span className={`mode-status-dot ${pendingModeIds.has(mode.id) ? 'pending' : standbyModeIds.has(mode.id) ? 'standby' : runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
               {!sidebarCollapsed && <span className="main-sidebar-item-name">{mode.name}</span>}
+              {!sidebarCollapsed && pendingModeIds.has(mode.id) && <span style={{ color: '#f87171', fontSize: 10, marginLeft: 'auto', whiteSpace: 'nowrap' }}>待处理</span>}
+              {!sidebarCollapsed && !pendingModeIds.has(mode.id) && standbyModeIds.has(mode.id) && <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 'auto', whiteSpace: 'nowrap' }}>待机中</span>}
             </button>
           ))}
         </div>
@@ -449,7 +476,7 @@ function App() {
 
       <main className="main-content">
         {activeMode ? (
-          <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeId={standbyModeId} />
+          <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeIds={standbyModeIds} pendingModeIds={pendingModeIds} />
         ) : (
           <div className="main-content-empty">
             <p>请从左侧选择一个模式，或添加新的自定义模式</p>
@@ -474,13 +501,15 @@ function ModeSubInterface({
   modeState,
   updateModeState,
   onModesChanged,
-  standbyModeId
+  standbyModeIds,
+  pendingModeIds
 }: {
   mode: ReplyMode
   modeState: ModeState
   updateModeState: (patch: Partial<ModeState>) => void
   onModesChanged: () => void
-  standbyModeId: string | null
+  standbyModeIds: Set<string>
+  pendingModeIds: Set<string>
 }): React.JSX.Element {
   const [modeData, setModeData] = useState(mode)
   const [appType, setAppType] = useState<AppType>('wechat')
@@ -523,7 +552,11 @@ function ModeSubInterface({
       showToast('模式已启动', 'success')
     } else {
       updateModeState({ modeStarting: false })
-      showToast(result?.error || '启动失败', 'error')
+      if (result?.reason === 'default_mode_not_running') {
+        showToast(result.message, 'error', 5000)
+      } else {
+        showToast(result?.error || '启动失败', 'error')
+      }
     }
   }, [mode.id, updateModeState])
 
@@ -695,7 +728,10 @@ function ModeSubInterface({
           <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>一键回复</button>
           <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handleSkip}>一键跳过</button>
         </div>
-        {standbyModeId === modeData.id && (
+        {pendingModeIds.has(modeData.id) && (
+          <div style={{ textAlign: 'center', color: '#f87171', fontSize: 11, marginTop: 4 }}>待处理</div>
+        )}
+        {!pendingModeIds.has(modeData.id) && standbyModeIds.has(modeData.id) && (
           <div style={{ textAlign: 'center', color: '#f59e0b', fontSize: 11, marginTop: 4 }}>待机中</div>
         )}
       </div>
@@ -1972,10 +2008,10 @@ function getMissingRequiredFields(
     .map((field) => field.label)
 }
 
-let _showToast: ((msg: string, type: 'success' | 'error') => void) | null = null
+let _showToast: ((msg: string, type: 'success' | 'error', duration?: number) => void) | null = null
 
-export function showToast(msg: string, type: 'success' | 'error') {
-  _showToast?.(msg, type)
+export function showToast(msg: string, type: 'success' | 'error', duration?: number) {
+  _showToast?.(msg, type, duration)
 }
 
 function Toast() {
@@ -1984,12 +2020,12 @@ function Toast() {
   const [type, setType] = useState<'success' | 'error'>('success')
   const timerRef = useRef<number | undefined>(undefined)
 
-  _showToast = useCallback((msg: string, t: 'success' | 'error') => {
+  _showToast = useCallback((msg: string, t: 'success' | 'error', duration?: number) => {
     setMessage(msg)
     setType(t)
     setVisible(true)
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = window.setTimeout(() => setVisible(false), 2500)
+    timerRef.current = window.setTimeout(() => setVisible(false), duration ?? 2500)
   }, [])
 
   return <div className={`toast ${type} ${visible ? 'show' : ''}`}>{message}</div>

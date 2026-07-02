@@ -1,4 +1,4 @@
-import { AIClient, AIClientConfig } from './ai-client'
+import { AIClient, AIClientConfig, buildMemorySection } from './ai-client'
 import { ProviderAdapter, ProviderEvent, ProviderInput } from './session-types'
 import { mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -16,7 +16,7 @@ export class LocalProvider implements ProviderAdapter {
   }
 
   async *run(input: ProviderInput): AsyncIterable<ProviderEvent> {
-    if (!input.screenshot) {
+    if (!input.screenshot && !input.extractedText) {
       yield { type: 'skip' }
       return
     }
@@ -25,7 +25,16 @@ export class LocalProvider implements ProviderAdapter {
     yield { type: 'thinking', content: '正在分析聊天内容...' }
 
     try {
-      const reply = await this.aiClient.getReply(input.screenshot, input.memoryCards)
+      const systemPrompt = (input.customPrompt || this.aiClient.getSystemPrompt()) + buildMemorySection(input.memoryCards)
+      let reply: string | null
+
+      if (input.extractedText && !input.screenshot) {
+        reply = await this.aiClient.getTextReply(systemPrompt, input.extractedText)
+      } else if (input.screenshot) {
+        reply = await this.aiClient.getReplyWithPrompt(systemPrompt, input.screenshot, input.extractedText)
+      } else {
+        reply = null
+      }
 
       if (!reply) {
         yield { type: 'skip' }

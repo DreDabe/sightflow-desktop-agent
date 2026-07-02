@@ -52,6 +52,9 @@ export class BoxSelectDevice implements DesktopDevice {
     void apiKey; void model; void baseURL
   }
 
+  setModeId(_modeId: string): void {
+  }
+
   setRegions(regions: BoxRegions | null): void {
     this.regions = regions
   }

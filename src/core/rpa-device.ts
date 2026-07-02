@@ -31,6 +31,7 @@ import { getWechatWindowInfo } from './rpa/window-utils'
 
 export class RPADevice implements DesktopDevice {
   private appType: AppType = 'wechat'
+  private modeId: string = ''
   private aiClient: AIClient | null = null
 
   setAppType(appType: AppType): void {
@@ -42,11 +43,14 @@ export class RPADevice implements DesktopDevice {
     this.aiClient = new AIClient({ apiKey, model: model || undefined, baseURL: baseURL || undefined })
   }
 
+  setModeId(modeId: string): void {
+    this.modeId = modeId
+  }
+
   // ── 生命周期 ──
   // 旧实现里 clearLayoutCache 由 WeChatChannelSession.onStop 调用。改用 GenericChannelSession 之后，
   // 把这个微信特定的清理动作下沉到设备的 onSessionStop hook 里，让 channel session 不必感知 appType。
   onSessionStop(): void {
-    clearLayoutCache(this.appType)
   }
 
   // ── 感知层 ──
@@ -215,15 +219,15 @@ export class RPADevice implements DesktopDevice {
   // ── chatMainArea Diff 检测 ──
 
   async setChatBaseline(): Promise<boolean> {
-    return setChatBaselineFn(this.appType)
+    return setChatBaselineFn(this.appType, this.modeId)
   }
 
   async hasChatAreaChanged(): Promise<{ hasDiff: boolean; hasBaseline: boolean }> {
-    return checkChatAreaDiff(this.appType)
+    return checkChatAreaDiff(this.appType, this.modeId)
   }
 
   clearChatBaseline(): void {
-    clearChatBaselineFn()
+    clearChatBaselineFn(this.modeId)
   }
 
   // ── 动作层 ──

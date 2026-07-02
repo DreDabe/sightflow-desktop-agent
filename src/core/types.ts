@@ -44,6 +44,13 @@ export const PROVIDER_PRESETS = [
     defaultCapabilities: ['text', 'vision'] as ModelCapability[]
   },
   {
+    id: 'aliyun-bailian',
+    name: '阿里云百炼 (DashScope)',
+    defaultBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultModel: 'qwen-vl-plus',
+    defaultCapabilities: ['text', 'vision'] as ModelCapability[]
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     defaultBaseURL: 'https://api.openai.com/v1',

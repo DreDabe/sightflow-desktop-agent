@@ -57,12 +57,24 @@ export class AIClient {
    * memoryCards: 运行时注入的经验卡片（工作记忆），拼入 system prompt
    */
   async getReply(screenshotBase64: string, memoryCards?: MemoryCardBrief[]): Promise<string | null> {
+    const systemPrompt = this.config.systemPrompt + buildMemorySection(memoryCards)
+    return this.getReplyWithPrompt(systemPrompt, screenshotBase64)
+  }
+
+  getSystemPrompt(): string {
+    return this.config.systemPrompt
+  }
+
+  async getReplyWithPrompt(systemPrompt: string, screenshotBase64: string, extractedText?: string): Promise<string | null> {
     const startTime = Date.now()
     try {
       console.log('[AIClient] getReply 开始...')
+      const userPrompt = extractedText
+        ? `请根据以下聊天内容进行回复：\n${extractedText}`
+        : '请根据截图中微信聊天窗口的最新消息进行回复。'
       const replyText = await this.callVision(
-        this.config.systemPrompt + buildMemorySection(memoryCards),
-        '请根据截图中微信聊天窗口的最新消息进行回复。',
+        systemPrompt,
+        userPrompt,
         screenshotBase64
       )
 
@@ -77,6 +89,30 @@ export class AIClient {
     } catch (error: any) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
       console.error(`[AIClient] 聊天回复失败 (${elapsed}s):`, error?.message || error)
+      throw error
+    }
+  }
+
+  async getTextReply(systemPrompt: string, extractedText: string): Promise<string | null> {
+    const startTime = Date.now()
+    try {
+      console.log('[AIClient] getTextReply 开始...')
+      const replyText = await this.callText(
+        systemPrompt,
+        `请根据以下聊天内容进行回复：\n${extractedText}`
+      )
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+      console.log(`[AIClient] getTextReply 完成 (${elapsed}s):`, replyText?.slice(0, 100))
+
+      if (!replyText || replyText.trim() === '[SKIP]') {
+        return null
+      }
+
+      return replyText.trim()
+    } catch (error: any) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+      console.error(`[AIClient] 文本回复失败 (${elapsed}s):`, error?.message || error)
       throw error
     }
   }
@@ -215,14 +251,25 @@ export class AIClient {
     }
   }
 
+  private async callText(
+    systemPrompt: string,
+    userText: string
+  ): Promise<string> {
+    const data = await this.callAPI([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userText }
+    ])
+    return this.extractText(data)
+  }
+
   /**
    * 底层 HTTP 调用 — OpenAI 兼容 /chat/completions 端点
    * thinking 字段是火山方舟对标 OpenAI Responses API 的扩展参数，
    * 在非火山供应商上会被忽略，放在这里不影响兼容性
    */
-  private async callAPI(messages: any[]): Promise<any> {
+  private async callAPI(messages: any[], timeoutMs?: number): Promise<any> {
     const url = `${this.config.baseURL}/chat/completions`
-    const TIMEOUT_MS = 30_000 // 30 秒超时
+    const TIMEOUT_MS = timeoutMs ?? 60_000
     const callStart = Date.now()
 
     // 计算 payload 大小（粗略，不重复序列化）

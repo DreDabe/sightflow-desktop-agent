@@ -11,10 +11,13 @@ import { RPADevice } from '../core/rpa-device'
 import { BoxSelectDevice } from '../core/box-select-device'
 import { RuntimeHost } from '../core/runtime-host'
 import {
-  createInitialGenericChannelState,
-  GenericChannelSession
+  createInitialSystemChannelState,
+  GenericChannelSession,
+  ModeHandler
 } from '../core/generic-channel-session'
 import { AppType, BoxRegions, CaptureStrategy, isWechatLike } from '../core/rpa/types'
+import { clearLayoutCache } from '../core/rpa/vision-utils'
+import { clearChatBaseline } from '../core/rpa/image-compare'
 import { runBoxSelectWizard, type WizardStepKey } from './overlay-window'
 import {
   BUILTIN_DOUBAO_PROVIDER_ID,
@@ -53,6 +56,7 @@ const FIXED_ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
 const PROVIDER_PRESETS = [
   { id: 'volcengine-ark', name: '火山方舟', defaultBaseURL: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-0-lite-260215', defaultCapabilities: ['text', 'vision'] },
+  { id: 'aliyun-bailian', name: '阿里云百炼', defaultBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-vl-plus', defaultCapabilities: ['text', 'vision'] },
   { id: 'openai', name: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1', defaultModel: 'gpt-4o', defaultCapabilities: ['text', 'vision'] },
   { id: 'deepseek', name: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat', defaultCapabilities: ['text'] },
   { id: 'custom', name: '自定义', defaultBaseURL: '', defaultModel: '', defaultCapabilities: ['text'] }
@@ -159,7 +163,9 @@ const settingsStore = new StoreClass({
   }
 })
 
-const runtimeInstances = new Map<string, RuntimeHost<ReturnType<typeof createInitialGenericChannelState>>>()
+const runtimeInstances = new Map<string, RuntimeHost<ReturnType<typeof createInitialSystemChannelState>>>()
+let systemSession: GenericChannelSession | null = null
+let systemRuntime: RuntimeHost<ReturnType<typeof createInitialSystemChannelState>> | null = null
 let runtimeDevice: DesktopDevice | null = null
 let settingsWindow: BrowserWindow | null = null
 let memoryWindow: BrowserWindow | null = null
@@ -530,10 +536,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('engine:exitStandby', async (_event, modeId: string) => {
     if (typeof modeId !== 'string' || !modeId) return { success: false }
-    const rt = runtimeInstances.get(modeId)
-    if (rt?.isRunning()) {
-      rt.forceExitStandby()
-    }
+    systemSession?.forceExitStandby(modeId)
     return { success: true }
   })
 
@@ -829,10 +832,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('mode:setAutoReply', async (_event, modeId: string, autoReply: boolean) => {
     if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
-    const rt = runtimeInstances.get(modeId)
-    if (rt?.isRunning()) {
-      rt.updateAutoReply(autoReply)
-    }
+    systemSession?.updateModeAutoReply(modeId, autoReply)
     const settings = normalizeSettings(settingsStore.store)
     const allModes = ensureSystemModes(settings.modes)
     const mode = allModes.find((m) => m.id === modeId)
@@ -1342,16 +1342,84 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
     }
 
     const mainWindow = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null
-    const log = (type: 'thinking' | 'reply' | 'skip' | 'error', content: string): void => {
+    const modeLog = (type: 'thinking' | 'reply' | 'skip' | 'error', content: string): void => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('engine:log', { type, content, modeId: effectiveModeId })
       }
+    }
+    const systemLog = (type: 'thinking' | 'reply' | 'skip' | 'error', content: string): void => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          for (const mid of systemSession?.getRunningModeIds() ?? [effectiveModeId]) {
+            win.webContents.send('engine:log', { type, content, modeId: mid })
+          }
+        }
+      }
+    }
+
+    const allModes = ensureSystemModes(settings.modes)
+    const targetMode = allModes.find((m) => m.id === effectiveModeId)
+    if (!targetMode) {
+      return { ok: false, reason: 'mode_not_found', message: '未找到指定模式' }
+    }
+
+    if (systemSession && systemRuntime && systemRuntime.isRunning()) {
+      const runningIds = systemSession.getRunningModeIds()
+      const defaultModeId = settings.globalDefaultModeId
+      const defaultMode = allModes.find((m) => m.id === defaultModeId)
+      const defaultModeName = defaultMode?.name || defaultModeId
+      if (defaultModeId && !runningIds.includes(defaultModeId) && effectiveModeId !== defaultModeId) {
+        return {
+          ok: false,
+          reason: 'default_mode_not_running',
+          message: `请先启动默认模式"${defaultModeName}"，或前往设置中修改全局默认模式`
+        }
+      }
+    }
+
+    const modeHandler: ModeHandler = {
+      modeId: effectiveModeId,
+      modeName: targetMode.name,
+      prompt: targetMode.prompt,
+      autoReply: targetMode.autoReply,
+      sentimentEnabled: targetMode.sentimentEnabled,
+      unifiedPrefix: targetMode.unifiedPrefix,
+      replyModelHasVision: (replyModel.capabilities || []).includes('vision'),
+      onRecommendReply: (text: string) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('engine:recommendReply', { text, modeId: effectiveModeId })
+          }
+        }
+      },
+      onLog: modeLog,
+      onStandbyChange: (standby: boolean) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('engine:standbyChanged', { modeId: effectiveModeId, standby })
+          }
+        }
+      },
+      onPendingChange: (pending: boolean) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('engine:pendingChanged', { modeId: effectiveModeId, pending })
+          }
+        }
+      }
+    }
+
+    if (systemSession && systemRuntime && systemRuntime.isRunning()) {
+      systemSession.registerModeHandler(modeHandler)
+      runtimeInstances.set(effectiveModeId, systemRuntime)
+      notifyModeRunningChanged(effectiveModeId, true)
+      return { ok: true }
     }
 
     let device: DesktopDevice
     let strategy: CaptureStrategy
     try {
-      const built = await buildDevice(appType, settings, visionModel.apiKey, log, visionModel.modelName, visionModel.baseURL)
+      const built = await buildDevice(appType, settings, visionModel.apiKey, modeLog, visionModel.modelName, visionModel.baseURL)
       device = built.device
       strategy = built.strategy
     } catch (err: any) {
@@ -1361,7 +1429,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
       }
       throw err
     }
-    log('thinking', `已选用抓取策略：${strategy}`)
+    modeLog('thinking', `已选用抓取策略：${strategy}`)
     runtimeDevice = device
 
     const recorder = getTraceRecorder()
@@ -1389,16 +1457,15 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
     }
 
     const channel = new GenericChannelSession(device)
+    channel.registerModeHandler(modeHandler)
 
     let extractChatTextFn: ((screenshot: string) => Promise<string>) | undefined
     let classifySentimentFn: ((text: string) => Promise<import('../core/sentiment/types').SentimentResult>) | undefined
 
-    const allModes = ensureSystemModes(settings.modes)
-    const targetMode = allModes.find((m) => m.id === effectiveModeId)
-    const modeNeedsSentiment = targetMode?.sentimentEnabled === true
-    const replyModelNeedsText = !(replyModel.capabilities || []).includes('vision')
+    const anyModeNeedsSentiment = Array.from(channel['modeHandlers'].values()).some(h => h.sentimentEnabled)
+    const anyModeNeedsText = Array.from(channel['modeHandlers'].values()).some(h => !h.replyModelHasVision)
 
-    if (modeNeedsSentiment || replyModelNeedsText) {
+    if (anyModeNeedsSentiment || anyModeNeedsText) {
       try {
         const textExtractClient = new AIClient({
           apiKey: visionModel.apiKey,
@@ -1408,7 +1475,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
 
         extractChatTextFn = (screenshot) => textExtractClient.extractChatText(screenshot)
 
-        if (modeNeedsSentiment) {
+        if (anyModeNeedsSentiment) {
           sentimentClassifier = new SentimentClassifier()
           const scriptDir = ensureScriptsCopied(app.getAppPath(), app.getPath('userData'))
           await sentimentClassifier.start(
@@ -1419,36 +1486,36 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
 
           classifySentimentFn = (text) => sentimentClassifier!.classify(text)
 
-          log('thinking', '情感分析模块已就绪 ✓')
+          modeLog('thinking', '情感分析模块已就绪 ✓')
         }
 
-        if (replyModelNeedsText && !modeNeedsSentiment) {
-          log('thinking', '回复模型不支持视觉，已启用文本提取模式')
+        if (anyModeNeedsText && !anyModeNeedsSentiment) {
+          modeLog('thinking', '回复模型不支持视觉，已启用文本提取模式')
         }
       } catch (error: any) {
         console.error('[Main] 文本提取/情感分析模块启动失败:', error?.message || error)
-        log('thinking', '文本提取模块启动失败，将跳过文本提取')
+        modeLog('thinking', '文本提取模块启动失败，将跳过文本提取')
         sentimentClassifier = null
       }
     } else {
-      log('thinking', '当前模式未启用情感分析，已跳过')
+      modeLog('thinking', '当前模式未启用情感分析，已跳过')
     }
 
     const runtime = new RuntimeHost({
       appType,
       channel,
       provider,
-      initialState: createInitialGenericChannelState(
-        (replyModel.capabilities || []).includes('vision')
-      ),
-      onLog: log,
+      initialState: createInitialSystemChannelState(),
+      onLog: systemLog,
       onTrace,
       getMemoryCards: () => getExperienceStore().getActiveCardBriefs(),
       onSessionEnd: () => {
         recorder.endSession()
-        runtimeInstances.delete(effectiveModeId)
-        notifyEngineStateChanged(runtimeInstances.size > 0 ? 'running' : 'idle')
-        notifyModeRunningChanged(effectiveModeId, false)
+        for (const modeId of channel.getRunningModeIds()) {
+          runtimeInstances.delete(modeId)
+          notifyModeRunningChanged(modeId, false)
+        }
+        notifyEngineStateChanged('idle')
       },
       extractChatText: extractChatTextFn,
       classifySentiment: classifySentimentFn,
@@ -1456,13 +1523,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
         const current = normalizeSettings(settingsStore.store)
         return current.globalAutoReply
       },
-      onRecommendReply: (text: string) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('engine:recommendReply', { text, modeId: effectiveModeId })
-          }
-        }
-      },
+      onRecommendReply: () => {},
       identifyContact: async (screenshot: string) => {
         try {
           const textClient = new AIClient({
@@ -1505,15 +1566,11 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
         }
         return null
       },
-      onStandbyChange: (standby: boolean) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('engine:standbyChanged', { modeId: effectiveModeId, standby })
-          }
-        }
-      }
+      onStandbyChange: () => {}
     })
 
+    systemSession = channel
+    systemRuntime = runtime
     runtimeInstances.set(effectiveModeId, runtime)
 
     runtime.startSession().catch((err: any) => {
@@ -1558,51 +1615,78 @@ function resolveModelConfig(
 
 async function stopEngineCore(stopReason: string, modeId?: string): Promise<SkillPauseResult> {
   if (modeId) {
-    const rt = runtimeInstances.get(modeId)
-    if (!rt?.isRunning()) {
+    if (!systemSession || !systemRuntime) {
+      return { ok: false, reason: 'not_running', message: '引擎未运行' }
+    }
+    if (!systemSession.isModeRunning(modeId)) {
       return { ok: false, reason: 'not_running', message: '该模式引擎未运行' }
     }
-    try {
-      await rt.stopSession(stopReason)
-      runtimeInstances.delete(modeId)
-      if (runtimeInstances.size === 0 && sentimentClassifier) {
+
+    systemSession.unregisterModeHandler(modeId)
+    runtimeInstances.delete(modeId)
+
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('engine:standbyChanged', { modeId, standby: false })
+        win.webContents.send('engine:pendingChanged', { modeId, pending: false })
+      }
+    }
+
+    if (systemSession.getRunningModeIds().length === 0) {
+      try {
+        await systemRuntime.stopSession(stopReason)
+      } catch (error: any) {
+        // ignore
+      }
+      systemSession = null
+      systemRuntime = null
+      const settings = normalizeSettings(settingsStore.store)
+      clearLayoutCache(settings.appType)
+      clearChatBaseline()
+      if (sentimentClassifier) {
         sentimentClassifier.stop()
         sentimentClassifier = null
       }
-      notifyEngineStateChanged(runtimeInstances.size > 0 ? 'running' : 'idle')
-      notifyModeRunningChanged(modeId, false)
-      return { ok: true }
-    } catch (error: any) {
-      return {
-        ok: false,
-        reason: 'pause_failed',
-        message: error?.message || String(error)
-      }
+      notifyEngineStateChanged('idle')
     }
+
+    notifyModeRunningChanged(modeId, false)
+    return { ok: true }
   }
 
-  if (runtimeInstances.size === 0) {
+  if (!systemRuntime) {
     return { ok: false, reason: 'not_running', message: '引擎未运行' }
   }
 
-  const errors: string[] = []
-  for (const [id, rt] of runtimeInstances) {
-    try {
-      await rt.stopSession(stopReason)
-      notifyModeRunningChanged(id, false)
-    } catch (error: any) {
-      errors.push(`${id}: ${error?.message || String(error)}`)
-    }
+  const runningModeIds = systemSession?.getRunningModeIds() ?? []
+  try {
+    await systemRuntime.stopSession(stopReason)
+  } catch (error: any) {
+    // ignore
   }
+
+  for (const id of runningModeIds) {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('engine:standbyChanged', { modeId: id, standby: false })
+        win.webContents.send('engine:pendingChanged', { modeId: id, pending: false })
+      }
+    }
+    notifyModeRunningChanged(id, false)
+  }
+
   runtimeInstances.clear()
+  systemSession = null
+  systemRuntime = null
+  const settings = normalizeSettings(settingsStore.store)
+  clearLayoutCache(settings.appType)
+  clearChatBaseline()
   if (sentimentClassifier) {
     sentimentClassifier.stop()
     sentimentClassifier = null
   }
   notifyEngineStateChanged('idle')
-  return errors.length > 0
-    ? { ok: false, reason: 'pause_failed' as const, message: errors.join('; ') }
-    : { ok: true }
+  return { ok: true }
 }
 
 /** 通知 Renderer 引擎状态变化（让 UI 在远程启停时同步切换） */

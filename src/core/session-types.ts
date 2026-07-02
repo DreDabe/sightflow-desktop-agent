@@ -7,12 +7,10 @@ export interface ProviderInput {
   appType: AppType
   currentContact?: string
   ocrText?: string
-  /** 运行时注入的经验卡片（工作记忆）。Provider 可拼入 system prompt。 */
   memoryCards?: MemoryCardBrief[]
-  /** 情感分类结果。Provider 可拼入 user prompt 实现情感关怀。 */
   sentimentResult?: SentimentResult
-  /** 从截图中提取的聊天文本。当回复模型不支持视觉时，用此替代截图。 */
   extractedText?: string
+  customPrompt?: string
 }
 
 export type ProviderEvent =

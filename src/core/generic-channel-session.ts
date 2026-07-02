@@ -1,24 +1,26 @@
-// src/core/generic-channel-session.ts
-// 通用 ChannelSession — 驱动 DesktopDevice，具体位置来源由设备测量后写入 LayoutCache。
-//
-// 设计原则：本文件只依赖 DesktopDevice 接口。所有微信特定的行为（如 layoutCache 清理、
-// VLM bbox 状态同步）都封装到具体设备的 onSessionStart / onSessionStop / clearUnreadCache
-// 里，使 channel session 在不同设备之间真正可复用。
-
 import { DesktopDevice } from './device'
 import { ChannelContext, ChannelSession, ProviderEvent, SessionEvent } from './session-types'
 import { SentimentResult } from './sentiment/types'
 
-export interface GenericChannelState {
+export interface ModeHandler {
+  modeId: string
+  modeName: string
+  prompt: string
+  autoReply: boolean
+  sentimentEnabled: boolean
+  unifiedPrefix: string
+  replyModelHasVision: boolean
+  onRecommendReply: (text: string) => void
+  onLog: (type: 'thinking' | 'reply' | 'skip' | 'error', content: string) => void
+  onStandbyChange: (standby: boolean) => void
+  onPendingChange: (pending: boolean) => void
+}
+
+export interface SystemChannelState {
   measuredAt: number | null
   latestChatBaseline: number | null
   currentContactName: string
   currentModeId: string | null
-  currentModeAutoReply: boolean
-  currentModePrompt: string | null
-  currentModeSentimentEnabled: boolean
-  currentModeUnifiedPrefix: string
-  replyModelHasVision: boolean
   standby: boolean
   standbySince: number | null
   standbyRetryCount: number
@@ -26,19 +28,12 @@ export interface GenericChannelState {
   consecutiveNoChangeRounds: number
 }
 
-export function createInitialGenericChannelState(
-  replyModelHasVision = true
-): GenericChannelState {
+export function createInitialSystemChannelState(): SystemChannelState {
   return {
     measuredAt: null,
     latestChatBaseline: null,
     currentContactName: '',
     currentModeId: null,
-    currentModeAutoReply: true,
-    currentModePrompt: null,
-    currentModeSentimentEnabled: false,
-    currentModeUnifiedPrefix: '',
-    replyModelHasVision,
     standby: false,
     standbySince: null,
     standbyRetryCount: 0,
@@ -47,15 +42,66 @@ export function createInitialGenericChannelState(
   }
 }
 
-export class GenericChannelSession implements ChannelSession<GenericChannelState> {
+export class GenericChannelSession implements ChannelSession<SystemChannelState> {
   private readonly retryDelayMs = 5000
   private readonly standbyThreshold = 2
   private readonly maxStandbyDelayMs = 60000
   private consecutiveUnreadFailures = 0
+  private readonly modeHandlers = new Map<string, ModeHandler>()
+  private activeHandler: ModeHandler | null = null
 
   constructor(private readonly device: DesktopDevice) {}
 
-  async onStart(ctx: ChannelContext<GenericChannelState>): Promise<void> {
+  registerModeHandler(handler: ModeHandler): void {
+    this.modeHandlers.set(handler.modeId, handler)
+  }
+
+  unregisterModeHandler(modeId: string): void {
+    const handler = this.modeHandlers.get(modeId)
+    if (handler) {
+      handler.onStandbyChange(false)
+      handler.onPendingChange(false)
+    }
+    this.modeHandlers.delete(modeId)
+    if (this.activeHandler?.modeId === modeId) {
+      this.activeHandler = null
+    }
+  }
+
+  updateModeAutoReply(modeId: string, autoReply: boolean): void {
+    const handler = this.modeHandlers.get(modeId)
+    if (handler) {
+      handler.autoReply = autoReply
+    }
+  }
+
+  getRunningModeIds(): string[] {
+    return Array.from(this.modeHandlers.keys())
+  }
+
+  isModeRunning(modeId: string): boolean {
+    return this.modeHandlers.has(modeId)
+  }
+
+  forceExitStandby(modeId: string): void {
+    const ctx = this._context
+    if (!ctx || !ctx.state.standby) return
+    ctx.state.standby = false
+    ctx.state.standbySince = null
+    ctx.state.standbyRetryCount = 0
+    ctx.state.consecutiveNoChangeRounds = 0
+    for (const handler of this.modeHandlers.values()) {
+      handler.onStandbyChange(false)
+      handler.onPendingChange(false)
+    }
+    const handler = this.modeHandlers.get(modeId)
+    handler?.onLog('thinking', '用户操作，退出待机状态')
+  }
+
+  private _context: ChannelContext<SystemChannelState> | null = null
+
+  async onStart(ctx: ChannelContext<SystemChannelState>): Promise<void> {
+    this._context = ctx
     this.device.setAppType(ctx.appType)
     this.device.clearChatBaseline()
     this.consecutiveUnreadFailures = 0
@@ -64,14 +110,20 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
     ctx.host.enqueue({ type: 'bootstrap' })
   }
 
-  async onStop(ctx: ChannelContext<GenericChannelState>): Promise<void> {
+  async onStop(ctx: ChannelContext<SystemChannelState>): Promise<void> {
+    this._context = null
     this.device.clearChatBaseline()
     this.consecutiveUnreadFailures = 0
+    for (const handler of this.modeHandlers.values()) {
+      handler.onStandbyChange(false)
+      handler.onPendingChange(false)
+    }
     await this.device.onSessionStop?.()
     this.resetState(ctx.state)
   }
 
-  async onEvent(event: SessionEvent, ctx: ChannelContext<GenericChannelState>): Promise<void> {
+  async onEvent(event: SessionEvent, ctx: ChannelContext<SystemChannelState>): Promise<void> {
+    this._context = ctx
     this.device.setAppType(ctx.appType)
 
     switch (event.type) {
@@ -128,22 +180,23 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
 
         ctx.state.currentContactName = contactName
         const resolvedMode = contactName ? ctx.host.resolveMode(contactName) : null
-        if (resolvedMode) {
-          ctx.state.currentModeId = resolvedMode.modeId
-          ctx.state.currentModeAutoReply = resolvedMode.autoReply
-          ctx.state.currentModePrompt = resolvedMode.prompt
-          ctx.state.currentModeSentimentEnabled = resolvedMode.sentimentEnabled
-          ctx.state.currentModeUnifiedPrefix = resolvedMode.unifiedPrefix
-          ctx.host.log('thinking', `路由到模式: ${resolvedMode.modeName}`)
-        } else {
-          ctx.state.currentModeId = null
-          ctx.state.currentModeAutoReply = ctx.host.getAutoReply()
-          ctx.state.currentModePrompt = null
-          ctx.state.currentModeSentimentEnabled = false
-          ctx.state.currentModeUnifiedPrefix = ''
+        const targetHandler = this.resolveHandler(resolvedMode)
+
+        if (!targetHandler) {
+          ctx.host.log('skip', '无可用模式处理此对话，跳过')
+          await this.device.setChatBaseline()
+          ctx.state.latestChatBaseline = Date.now()
+          ctx.host.enqueue({ type: 'check_unread' })
+          break
         }
 
-        void this.forwardProviderEvents(screenshot, ctx)
+        this.clearPendingStates()
+        this.activeHandler = targetHandler
+
+        ctx.state.currentModeId = targetHandler.modeId
+        ctx.host.log('thinking', `路由到模式: ${targetHandler.modeName}`)
+
+        void this.forwardProviderEvents(screenshot, ctx, targetHandler)
         break
       }
 
@@ -157,36 +210,46 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
         break
 
       case 'provider.reply_text': {
-        let replyText = event.content
-        if (ctx.state.currentModeUnifiedPrefix) {
-          replyText = ctx.state.currentModeUnifiedPrefix + replyText
+        const handler = this.activeHandler
+        if (!handler) {
+          ctx.host.enqueue({ type: 'check_unread' })
+          break
         }
-        ctx.host.recommendReply(replyText)
-        const autoReply = ctx.state.currentModeAutoReply
-        if (autoReply) {
+
+        let replyText = event.content
+        if (handler.unifiedPrefix) {
+          replyText = handler.unifiedPrefix + replyText
+        }
+        handler.onRecommendReply(replyText)
+        handler.onPendingChange(false)
+
+        if (handler.autoReply) {
           ctx.state.consecutiveNoChangeRounds = 0
           const sendStart = Date.now()
           await this.device.sendMessage(replyText)
-          ctx.host.log('reply', replyText)
+          handler.onLog('reply', replyText)
           ctx.host.trace({
             phase: 'act',
             summary: '自动发送回复',
             action: { kind: 'send', payload: replyText },
             outcome: { status: 'ok', latencyMs: Date.now() - sendStart }
           })
+          await this.device.setChatBaseline()
+          ctx.state.latestChatBaseline = Date.now()
+          ctx.host.enqueue({ type: 'check_unread' })
         } else {
-          ctx.state.consecutiveNoChangeRounds += 1
-          ctx.host.log('reply', `[推荐回复] ${replyText}`)
+          handler.onLog('reply', `[推荐回复] ${replyText}`)
           ctx.host.trace({
             phase: 'act',
             summary: '生成推荐回复（未自动发送）',
             action: { kind: 'send', payload: replyText },
             outcome: { status: 'skip', detail: 'autoReply off' }
           })
+          await this.device.setChatBaseline()
+          ctx.state.latestChatBaseline = Date.now()
+          this.enterStandby(ctx)
+          ctx.host.enqueue({ type: 'wait_retry', reason: 'standby', delayMs: this.retryDelayMs })
         }
-        await this.device.setChatBaseline()
-        ctx.state.latestChatBaseline = Date.now()
-        ctx.host.enqueue({ type: 'check_unread' })
         break
       }
 
@@ -197,6 +260,9 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
           summary: '判断本轮无需回复',
           outcome: { status: 'skip' }
         })
+        if (this.activeHandler) {
+          this.activeHandler.onPendingChange(false)
+        }
         await this.device.setChatBaseline()
         ctx.state.latestChatBaseline = Date.now()
         ctx.host.enqueue({ type: 'check_unread' })
@@ -209,6 +275,9 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
           summary: '回复服务异常',
           outcome: { status: 'fail', detail: event.error }
         })
+        if (this.activeHandler) {
+          this.activeHandler.onPendingChange(false)
+        }
         ctx.host.enqueue({
           type: 'wait_retry',
           reason: 'provider_error',
@@ -250,6 +319,7 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
         }
 
         if (diffResult.hasDiff) {
+          ctx.state.consecutiveNoChangeRounds = 0
           ctx.host.log('thinking', '检测到当前对话有新消息')
           ctx.host.trace({
             phase: 'verify',
@@ -260,7 +330,10 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
           break
         }
 
-        if (!ctx.state.currentModeAutoReply && ctx.state.consecutiveNoChangeRounds >= this.standbyThreshold) {
+        ctx.state.consecutiveNoChangeRounds += 1
+
+        const activeNeedsAttention = this.activeHandler && !this.activeHandler.autoReply
+        if (activeNeedsAttention && ctx.state.consecutiveNoChangeRounds >= this.standbyThreshold) {
           this.enterStandby(ctx)
           ctx.host.enqueue({ type: 'wait_retry', reason: 'standby', delayMs: this.retryDelayMs })
           break
@@ -321,44 +394,74 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
     }
   }
 
+  private resolveHandler(
+    resolvedMode: { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
+  ): ModeHandler | null {
+    if (resolvedMode) {
+      const handler = this.modeHandlers.get(resolvedMode.modeId)
+      if (handler) {
+        handler.prompt = resolvedMode.prompt
+        handler.autoReply = resolvedMode.autoReply
+        handler.sentimentEnabled = resolvedMode.sentimentEnabled
+        handler.unifiedPrefix = resolvedMode.unifiedPrefix
+        return handler
+      }
+    }
+
+    if (this.modeHandlers.size > 0) {
+      return this.modeHandlers.values().next().value!
+    }
+
+    return null
+  }
+
+  private clearPendingStates(): void {
+    for (const handler of this.modeHandlers.values()) {
+      handler.onPendingChange(false)
+    }
+  }
+
   private async forwardProviderEvents(
     screenshot: string,
-    ctx: ChannelContext<GenericChannelState>
+    ctx: ChannelContext<SystemChannelState>,
+    handler: ModeHandler
   ): Promise<void> {
     try {
       let sentimentResult: SentimentResult | undefined
       let extractedText: string | undefined
 
-      const needExtractText = !ctx.state.replyModelHasVision || ctx.state.currentModeSentimentEnabled
+      const needExtractText = !handler.replyModelHasVision || handler.sentimentEnabled
       if (needExtractText && ctx.host.extractChatText) {
         try {
-          ctx.host.log('thinking', '正在提取聊天文本...')
+          handler.onLog('thinking', '正在提取聊天文本...')
           const text = await ctx.host.extractChatText(screenshot)
           if (text) {
             extractedText = text
             ctx.state.lastExtractedText = text
-            if (ctx.state.currentModeSentimentEnabled && ctx.host.classifySentiment) {
-              ctx.host.log('thinking', '正在进行情感分析...')
+            if (handler.sentimentEnabled && ctx.host.classifySentiment) {
+              handler.onLog('thinking', '正在进行情感分析...')
               sentimentResult = await ctx.host.classifySentiment(text)
               const maxProb = Math.max(...(sentimentResult.probabilities || []))
               if (sentimentResult.classIndex === 0) {
-                ctx.host.log('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），无需情感关怀`)
+                handler.onLog('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），无需情感关怀`)
               } else {
-                ctx.host.log('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），将注入情感关怀指令`)
+                handler.onLog('thinking', `情感分析结果：${sentimentResult.className}（${(maxProb * 100).toFixed(1)}%），将注入情感关怀指令`)
               }
             }
           } else {
-            ctx.host.log('thinking', '未提取到聊天文本')
+            handler.onLog('thinking', '未提取到聊天文本')
           }
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error)
-          ctx.host.log('error', `文本提取/情感分析失败：${msg}`)
+          handler.onLog('error', `文本提取/情感分析失败：${msg}`)
         }
       }
 
       for await (const event of ctx.host.runProvider({
         screenshot,
         appType: ctx.appType,
+        currentContact: ctx.state.currentContactName || undefined,
+        ...(handler.prompt ? { customPrompt: handler.prompt } : {}),
         ...(sentimentResult ? { sentimentResult } : {}),
         ...(extractedText ? { extractedText } : {})
       })) {
@@ -390,15 +493,11 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
     }
   }
 
-  private resetState(state: GenericChannelState): void {
+  private resetState(state: SystemChannelState): void {
     state.measuredAt = null
     state.latestChatBaseline = null
     state.currentContactName = ''
     state.currentModeId = null
-    state.currentModeAutoReply = true
-    state.currentModePrompt = null
-    state.currentModeSentimentEnabled = false
-    state.currentModeUnifiedPrefix = ''
     state.standby = false
     state.standbySince = null
     state.standbyRetryCount = 0
@@ -406,22 +505,31 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
     state.consecutiveNoChangeRounds = 0
   }
 
-  private enterStandby(ctx: ChannelContext<GenericChannelState>): void {
+  private enterStandby(ctx: ChannelContext<SystemChannelState>): void {
     if (ctx.state.standby) return
     ctx.state.standby = true
     ctx.state.standbySince = Date.now()
     ctx.state.standbyRetryCount = 0
     ctx.host.log('skip', '已进入待机状态，等待用户操作或对话变化')
-    ctx.host.notifyStandby?.(true)
+    for (const handler of this.modeHandlers.values()) {
+      if (handler === this.activeHandler) {
+        handler.onPendingChange(true)
+      } else {
+        handler.onStandbyChange(true)
+      }
+    }
   }
 
-  private exitStandby(ctx: ChannelContext<GenericChannelState>): void {
+  private exitStandby(ctx: ChannelContext<SystemChannelState>): void {
     if (!ctx.state.standby) return
     ctx.state.standby = false
     ctx.state.standbySince = null
     ctx.state.standbyRetryCount = 0
     ctx.state.consecutiveNoChangeRounds = 0
-    ctx.host.notifyStandby?.(false)
+    for (const handler of this.modeHandlers.values()) {
+      handler.onStandbyChange(false)
+      handler.onPendingChange(false)
+    }
   }
 
   private getStandbyDelay(retryCount: number): number {
@@ -432,7 +540,7 @@ export class GenericChannelSession implements ChannelSession<GenericChannelState
   }
 
   private async tryOpenUnreadConversation(
-    ctx: ChannelContext<GenericChannelState>
+    ctx: ChannelContext<SystemChannelState>
   ): Promise<'opened' | 'contact_not_ready'> {
     let contactResult = await this.device.isChatContactUnread()
 

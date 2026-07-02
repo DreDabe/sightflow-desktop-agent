@@ -1105,6 +1105,11 @@ textarea.form-input {
 }
 
 .mode-status-dot.standby {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+}
+
+.mode-status-dot.pending {
   background: #f87171;
   box-shadow: 0 0 6px rgba(248, 113, 113, 0.5);
 }
