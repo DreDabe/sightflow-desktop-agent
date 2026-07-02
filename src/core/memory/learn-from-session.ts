@@ -38,7 +38,8 @@ export async function induceCardsFromSession(
   steps: TraceStep[]
 ): Promise<InducedCard[]> {
   const digest = buildTraceDigest(session, steps)
-  const raw = await ai.callText(`${INDUCE_SYSTEM_PROMPT}\n\n## 执行轨迹\n${digest}`)
+  const raw = await ai.getTextReply('你是一个经验归纳助手', `${INDUCE_SYSTEM_PROMPT}\n\n## 执行轨迹\n${digest}`)
+  if (!raw) return []
   const parsed = extractJsonArray(raw)
 
   const bySeq = new Map(steps.map((step) => [step.seq, step.stepId]))

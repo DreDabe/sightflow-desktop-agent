@@ -90,7 +90,9 @@ const START_STATUS_MAP: Record<SkillStartReason, number> = {
   no_provider: 400,
   missing_required_field: 400,
   engine_failed: 500,
-  wizard_cancelled: 409
+  wizard_cancelled: 409,
+  mode_not_found: 400,
+  default_mode_not_running: 400
 }
 
 const PAUSE_STATUS_MAP: Record<SkillPauseReason, number> = {
