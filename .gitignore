@@ -39,3 +39,22 @@ sentpredict/ROC_curve.png
 
 # Embedded Python (downloaded via setup script)
 resources/python/
+
+# IDE config
+.trae/
+.codegraph/
+
+# Internal docs (not for public release)
+docs/plan/
+docs/requirements/
+docs/bug_report.md
+
+# Local test scripts
+src/core/rpa/tests/
+scripts/test-cli.js
+scripts/test-cli.ts
+
+# Source file variants (only keep runtime-needed assets)
+resources/logo_black.png
+resources/logo_white.png
+resources/icon_right-angle.png
