@@ -1,7 +1,249 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, createContext, useContext } from 'react'
 import logoUrl from './assets/logo.png'
+import logoBlackUrl from './assets/logo_black.png'
 import MemoryWindow from './MemoryWindow'
 import './index.css'
+
+type Locale = 'zh' | 'en'
+
+const translations: Record<Locale, Record<string, string>> = {
+  zh: {
+    'settings.title': '设置',
+    'settings.base': '基础配置',
+    'settings.model': '模型配置',
+    'settings.training': '模型训练',
+    'settings.agent': '智能体',
+    'settings.mode': '模式管理',
+    'settings.base.desc': '维护桌面端运行所需的基础参数。',
+    'settings.basic': '基础设置',
+    'settings.appearance': '外观',
+    'settings.appearance.dark': '深色主题',
+    'settings.appearance.light': '浅色主题',
+    'settings.language': '语言',
+    'settings.language.zh': '中文',
+    'settings.language.en': 'English',
+    'settings.globalModel': '全局模型选择',
+    'settings.globalModel.hint': '选择用于视觉检测和回复生成的模型。如需添加新模型，请前往"模型配置"页面。',
+    'settings.visionModel': '全局视觉模型',
+    'settings.visionModel.hint': '用于 VLM 布局检测、红点检测、对象识别',
+    'settings.replyModel': '全局回复模型',
+    'settings.replyModel.hint': '用于 AI 回复生成',
+    'settings.selectVisionModel': '请选择视觉模型',
+    'settings.selectReplyModel': '请选择回复模型',
+    'settings.testConnection': '测试连接',
+    'mode.start': '启动',
+    'mode.stop': '停止',
+    'mode.starting': '启动中',
+    'mode.running': '运行中',
+    'mode.stopped': '已停止',
+    'mode.targetApp': '目标应用',
+    'mode.autoReply': '自动回复',
+    'mode.sentiment': '情感分析',
+    'mode.unifiedPrefix': '统一开头',
+    'mode.add': '添加模式',
+    'mode.addTitle': '添加自定义模式',
+    'mode.name': '模式名称',
+    'mode.name.required': '模式名称不能为空',
+    'mode.prompt': '回复规则 (Prompt)',
+    'mode.prompt.required': '回复规则不能为空',
+    'mode.prompt.placeholder': 'AI 回复的引导提示词',
+    'mode.sentiment.hint': '开启后该模式运行时使用情感分析',
+    'mode.unifiedPrefix.hint': '回复内容前自动添加的文字',
+    'mode.unifiedPrefix.placeholder': '例如：【机器客服自动回复】',
+    'object.specific': '特定对象',
+    'object.search': '搜索对象',
+    'object.searchBtn': '搜索',
+    'object.add': '+添加对象',
+    'object.addTitle': '添加特定对象',
+    'object.name': '名称',
+    'object.name.required': '对象名称不能为空',
+    'object.name.hint': '用于 VLM 匹配识别',
+    'object.name.placeholder': '对方在聊天软件中的名称',
+    'object.title': '称呼',
+    'object.title.label': '特定称呼',
+    'object.title.placeholder': '例如：老张、王总',
+    'object.relationship': '关系',
+    'object.relationship.placeholder': '例如：姐姐、老板',
+    'object.autoReply': '自动回复',
+    'object.autoReply.follow': '跟随模式设置',
+    'object.autoReply.on': '开启',
+    'object.autoReply.off': '关闭',
+    'object.empty': '暂无特定对象',
+    'object.delete': '删除',
+    'object.delete.fail': '删除失败',
+    'object.added': '特定对象已添加',
+    'object.add.fail': '添加失败',
+    'object.editTitle': '编辑特定对象',
+    'object.updated': '对象已更新',
+    'object.update.fail': '更新失败',
+    'log.title': '运行日志',
+    'log.empty': '暂无日志',
+    'log.expand': '展开日志',
+    'log.collapse': '收起日志',
+    'log.type.thinking': '思考',
+    'log.type.reply': '回复',
+    'log.type.skip': '跳过',
+    'log.type.error': '错误',
+    'reply.recommended': '推荐回复',
+    'reply.placeholder': 'AI 生成的推荐回复将显示在这里',
+    'reply.paste': '一键粘贴',
+    'reply.send': '一键回复',
+    'reply.skip': '一键跳过',
+    'reply.skip.toast': '已跳过本次推荐回复',
+    'reply.pending': '待处理',
+    'reply.standby': '待机中',
+    'sidebar.expand': '展开菜单',
+    'sidebar.collapse': '收起菜单',
+    'sidebar.settings': '设置',
+    'sidebar.memory': '工作记忆',
+    'sidebar.empty': '请从左侧选择一个模式，或添加新的自定义模式',
+    'btn.cancel': '取消',
+    'btn.add': '添加',
+    'btn.save': '保存',
+    'toast.configVision': '请先配置视觉模型',
+    'toast.modeStarted': '模式已启动',
+    'toast.modeStartFail': '启动失败',
+    'toast.modeStopped': '模式已停止',
+    'toast.modeStopFail': '停止失败',
+    'toast.modeAdded': '模式已添加',
+    'toast.addFail': '添加失败',
+    'toast.connectionOk': '连接测试成功',
+    'toast.connectionFail': '连接测试失败',
+    'app.wechat': '微信',
+    'app.wework': '企业微信',
+    'app.dingtalk': '钉钉',
+    'app.lark': '飞书 / Lark',
+    'app.slack': 'Slack',
+    'app.telegram': 'Telegram',
+    'app.generic': '其他桌面应用'
+  },
+  en: {
+    'settings.title': 'Settings',
+    'settings.base': 'General',
+    'settings.model': 'Models',
+    'settings.training': 'Training',
+    'settings.agent': 'Agents',
+    'settings.mode': 'Modes',
+    'settings.base.desc': 'Manage basic parameters for the desktop client.',
+    'settings.basic': 'Basic Settings',
+    'settings.appearance': 'Appearance',
+    'settings.appearance.dark': 'Dark Theme',
+    'settings.appearance.light': 'Light Theme',
+    'settings.language': 'Language',
+    'settings.language.zh': '中文',
+    'settings.language.en': 'English',
+    'settings.globalModel': 'Global Model Selection',
+    'settings.globalModel.hint': 'Select models for vision detection and reply generation. Add new models in the "Models" page.',
+    'settings.visionModel': 'Global Vision Model',
+    'settings.visionModel.hint': 'For VLM layout detection, unread indicators, object recognition',
+    'settings.replyModel': 'Global Reply Model',
+    'settings.replyModel.hint': 'For AI reply generation',
+    'settings.selectVisionModel': 'Select vision model',
+    'settings.selectReplyModel': 'Select reply model',
+    'settings.testConnection': 'Test Connection',
+    'mode.start': 'Start',
+    'mode.stop': 'Stop',
+    'mode.starting': 'Starting',
+    'mode.running': 'Running',
+    'mode.stopped': 'Stopped',
+    'mode.targetApp': 'Target App',
+    'mode.autoReply': 'Auto Reply',
+    'mode.sentiment': 'Sentiment',
+    'mode.unifiedPrefix': 'Prefix',
+    'mode.add': 'Add Mode',
+    'mode.addTitle': 'Add Custom Mode',
+    'mode.name': 'Mode Name',
+    'mode.name.required': 'Mode name is required',
+    'mode.prompt': 'Reply Rule (Prompt)',
+    'mode.prompt.required': 'Reply rule is required',
+    'mode.prompt.placeholder': 'Prompt for AI reply generation',
+    'mode.sentiment.hint': 'Enable sentiment analysis when this mode is running',
+    'mode.unifiedPrefix.hint': 'Text automatically prepended to replies',
+    'mode.unifiedPrefix.placeholder': 'e.g. [Auto Reply]',
+    'object.specific': 'Specific Objects',
+    'object.search': 'Search objects',
+    'object.searchBtn': 'Search',
+    'object.add': '+ Add Object',
+    'object.addTitle': 'Add Specific Object',
+    'object.name': 'Name',
+    'object.name.required': 'Object name is required',
+    'object.name.hint': 'For VLM matching',
+    'object.name.placeholder': 'Contact name in chat app',
+    'object.title': 'Title',
+    'object.title.label': 'Specific Title',
+    'object.title.placeholder': 'e.g. Boss Zhang',
+    'object.relationship': 'Relationship',
+    'object.relationship.placeholder': 'e.g. Sister, Boss',
+    'object.autoReply': 'Auto Reply',
+    'object.autoReply.follow': 'Follow mode setting',
+    'object.autoReply.on': 'On',
+    'object.autoReply.off': 'Off',
+    'object.empty': 'No specific objects',
+    'object.delete': 'Delete',
+    'object.delete.fail': 'Delete failed',
+    'object.added': 'Object added',
+    'object.add.fail': 'Add failed',
+    'object.editTitle': 'Edit Specific Object',
+    'object.updated': 'Object updated',
+    'object.update.fail': 'Update failed',
+    'log.title': 'Runtime Log',
+    'log.empty': 'No logs yet',
+    'log.expand': 'Expand Log',
+    'log.collapse': 'Collapse Log',
+    'log.type.thinking': 'Think',
+    'log.type.reply': 'Reply',
+    'log.type.skip': 'Skip',
+    'log.type.error': 'Error',
+    'reply.recommended': 'Recommended Reply',
+    'reply.placeholder': 'AI-generated recommended reply will appear here',
+    'reply.paste': 'Paste',
+    'reply.send': 'Send',
+    'reply.skip': 'Skip',
+    'reply.skip.toast': 'Skipped this recommended reply',
+    'reply.pending': 'Pending',
+    'reply.standby': 'Standby',
+    'sidebar.expand': 'Expand',
+    'sidebar.collapse': 'Collapse',
+    'sidebar.settings': 'Settings',
+    'sidebar.memory': 'Working Memory',
+    'sidebar.empty': 'Select a mode from the sidebar, or add a new custom mode',
+    'btn.cancel': 'Cancel',
+    'btn.add': 'Add',
+    'btn.save': 'Save',
+    'toast.configVision': 'Please configure a vision model first',
+    'toast.modeStarted': 'Mode started',
+    'toast.modeStartFail': 'Start failed',
+    'toast.modeStopped': 'Mode stopped',
+    'toast.modeStopFail': 'Stop failed',
+    'toast.modeAdded': 'Mode added',
+    'toast.addFail': 'Add failed',
+    'toast.connectionOk': 'Connection test successful',
+    'toast.connectionFail': 'Connection test failed',
+    'app.wechat': 'WeChat',
+    'app.wework': 'WeCom',
+    'app.dingtalk': 'DingTalk',
+    'app.lark': 'Lark',
+    'app.slack': 'Slack',
+    'app.telegram': 'Telegram',
+    'app.generic': 'Other Desktop App'
+  }
+}
+
+interface I18nContextValue {
+  t: (key: string) => string
+  locale: Locale
+  setLocale: (l: Locale) => void
+}
+
+const I18nContext = createContext<I18nContextValue>({
+  t: (key: string) => key,
+  locale: 'zh',
+  setLocale: () => {}
+})
+
+function useI18n(): I18nContextValue {
+  return useContext(I18nContext)
+}
 
 interface LogEntry {
   time: string
@@ -94,6 +336,7 @@ interface PerAppCapture {
 
 interface AppSettings {
   locale: 'zh' | 'en'
+  theme: 'dark' | 'light'
   appType: AppType
   vision: {
     apiKey: string
@@ -277,6 +520,50 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [standbyModeIds, setStandbyModeIds] = useState<Set<string>>(new Set())
   const [pendingModeIds, setPendingModeIds] = useState<Set<string>>(new Set())
+  const [locale, setLocaleState] = useState<Locale>('zh')
+  const [theme, setThemeState] = useState<'dark' | 'light'>('dark')
+
+  const t = useCallback((key: string): string => {
+    return translations[locale]?.[key] ?? translations.zh[key] ?? key
+  }, [locale])
+
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l)
+    void window.electron?.invoke('settings:set', { locale: l })
+  }, [])
+
+  const setTheme = useCallback((th: 'dark' | 'light') => {
+    setThemeState(th)
+    document.documentElement.setAttribute('data-theme', th)
+    void window.electron?.invoke('settings:set', { theme: th })
+  }, [])
+
+  useEffect(() => {
+    const load = async () => {
+      const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
+      if (settings) {
+        setLocaleState(settings.locale || 'zh')
+        setThemeState(settings.theme || 'dark')
+        document.documentElement.setAttribute('data-theme', settings.theme || 'dark')
+      }
+    }
+    void load()
+  }, [])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('settings:changed', (data: { theme?: string; locale?: string }) => {
+      if (data.theme === 'light' || data.theme === 'dark') {
+        setThemeState(data.theme)
+        document.documentElement.setAttribute('data-theme', data.theme)
+      }
+      if (data.locale === 'zh' || data.locale === 'en') {
+        setLocaleState(data.locale)
+      }
+    })
+    return cleanup ?? (() => {})
+  }, [])
+
+  const i18nValue = useMemo(() => ({ t, locale, setLocale }), [t, locale, setLocale])
 
   const getModeState = useCallback((modeId: string): ModeState => {
     return modeStates.get(modeId) || { logs: [], recommendedReply: '', modeRunning: false, modeStarting: false }
@@ -398,19 +685,23 @@ function App() {
 
   if (windowKind === 'settings') {
     return (
-      <div className="app settings-window">
-        <SettingsWindow />
-        <Toast />
-      </div>
+      <I18nContext.Provider value={i18nValue}>
+        <div className="app settings-window">
+          <SettingsWindow theme={theme} setTheme={setTheme} />
+          <Toast />
+        </div>
+      </I18nContext.Provider>
     )
   }
 
   if (windowKind === 'memory') {
     return (
-      <div className="app settings-window">
-        <MemoryWindow />
-        <Toast />
-      </div>
+      <I18nContext.Provider value={i18nValue}>
+        <div className="app settings-window">
+          <MemoryWindow />
+          <Toast />
+        </div>
+      </I18nContext.Provider>
     )
   }
 
@@ -418,80 +709,81 @@ function App() {
   const activeMode = modes.find((m) => m.id === activeModeId)
 
   return (
-    <div className="app main-shell">
-      <aside className={`main-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="main-sidebar-brand">
-          <img src={logoUrl} alt="AutoReply" className="app-logo" />
-        </div>
-        <div className="main-sidebar-modes">
-          {enabledModes.map((mode) => (
-            <button
-              key={mode.id}
-              className={`main-sidebar-item ${mode.id === activeModeId ? 'active' : ''}`}
-              onClick={() => setActiveModeId(mode.id)}
-              title={mode.name}
-            >
-              <span className={`mode-status-dot ${pendingModeIds.has(mode.id) ? 'pending' : standbyModeIds.has(mode.id) ? 'standby' : runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
-              {!sidebarCollapsed && <span className="main-sidebar-item-name">{mode.name}</span>}
-              {!sidebarCollapsed && pendingModeIds.has(mode.id) && <span style={{ color: '#f87171', fontSize: 10, marginLeft: 'auto', whiteSpace: 'nowrap' }}>待处理</span>}
-              {!sidebarCollapsed && !pendingModeIds.has(mode.id) && standbyModeIds.has(mode.id) && <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 'auto', whiteSpace: 'nowrap' }}>待机中</span>}
-            </button>
-          ))}
-        </div>
-        <div className="main-sidebar-divider" />
-        <button
-          className="main-sidebar-item main-sidebar-item-add"
-          onClick={() => setShowAddModeModal(true)}
-          title="添加模式"
-        >
-          {!sidebarCollapsed && '+ 添加模式'}
-          {sidebarCollapsed && '+'}
-        </button>
-        <div className="main-sidebar-divider" />
-        <button
-          className="main-sidebar-collapse-btn"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? '展开菜单' : '收起菜单'}
-        >
-          {sidebarCollapsed ? '▶' : '◀'}
-        </button>
-        <div className="main-sidebar-bottom">
-          <button
-            className="main-sidebar-item main-sidebar-bottom-btn"
-            onClick={() => window.electron?.invoke('settings:open')}
-            title="设置"
-          >
-            <GearIcon />
-          </button>
-          <button
-            className="main-sidebar-item main-sidebar-bottom-btn"
-            onClick={() => window.electron?.invoke('memory:open')}
-            title="工作记忆"
-          >
-            <MemoryIcon />
-          </button>
-        </div>
-      </aside>
-
-      <main className="main-content">
-        {activeMode ? (
-          <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeIds={standbyModeIds} pendingModeIds={pendingModeIds} />
-        ) : (
-          <div className="main-content-empty">
-            <p>请从左侧选择一个模式，或添加新的自定义模式</p>
+    <I18nContext.Provider value={i18nValue}>
+      <div className="app main-shell">
+        <aside className={`main-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          <div className="main-sidebar-brand">
+            <img src={theme === 'light' ? logoBlackUrl : logoUrl} alt="AutoReply" className="app-logo" />
           </div>
+          <button
+            className="main-sidebar-collapse-btn"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+          >
+            {sidebarCollapsed ? '▶' : '◀'}
+          </button>
+          <div className="main-sidebar-modes">
+            {enabledModes.map((mode) => (
+              <button
+                key={mode.id}
+                className={`main-sidebar-item ${mode.id === activeModeId ? 'active' : ''}`}
+                onClick={() => setActiveModeId(mode.id)}
+                title={mode.name}
+              >
+                <span className={`mode-status-dot ${pendingModeIds.has(mode.id) ? 'pending' : standbyModeIds.has(mode.id) ? 'standby' : runningModeIds.has(mode.id) ? 'running' : 'idle'}`} />
+                {!sidebarCollapsed && <span className="main-sidebar-item-name">{mode.name}</span>}
+                {!sidebarCollapsed && pendingModeIds.has(mode.id) && <span style={{ color: '#f87171', fontSize: 10, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{t('reply.pending')}</span>}
+                {!sidebarCollapsed && !pendingModeIds.has(mode.id) && standbyModeIds.has(mode.id) && <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{t('reply.standby')}</span>}
+              </button>
+            ))}
+          </div>
+          <div className="main-sidebar-divider" />
+          <button
+            className="main-sidebar-item main-sidebar-item-add"
+            onClick={() => setShowAddModeModal(true)}
+            title={t('mode.add')}
+          >
+            {!sidebarCollapsed ? `+ ${t('mode.add')}` : '+'}
+          </button>
+          <div className="main-sidebar-divider" />
+          <div className="main-sidebar-bottom">
+            <button
+              className="main-sidebar-item main-sidebar-bottom-btn"
+              onClick={() => window.electron?.invoke('settings:open')}
+              title={t('sidebar.settings')}
+            >
+              <GearIcon />
+            </button>
+            <button
+              className="main-sidebar-item main-sidebar-bottom-btn"
+              onClick={() => window.electron?.invoke('memory:open')}
+              title={t('sidebar.memory')}
+            >
+              <MemoryIcon />
+            </button>
+          </div>
+        </aside>
+
+        <main className="main-content">
+          {activeMode ? (
+            <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeIds={standbyModeIds} pendingModeIds={pendingModeIds} />
+          ) : (
+            <div className="main-content-empty">
+              <p>{t('sidebar.empty')}</p>
+            </div>
+          )}
+        </main>
+
+        {showAddModeModal && (
+          <AddModeModal
+            onClose={() => setShowAddModeModal(false)}
+            onSaved={() => { loadModes(); setShowAddModeModal(false) }}
+          />
         )}
-      </main>
 
-      {showAddModeModal && (
-        <AddModeModal
-          onClose={() => setShowAddModeModal(false)}
-          onSaved={() => { loadModes(); setShowAddModeModal(false) }}
-        />
-      )}
-
-      <Toast />
-    </div>
+        <Toast />
+      </div>
+    </I18nContext.Provider>
   )
 }
 
@@ -510,11 +802,15 @@ function ModeSubInterface({
   standbyModeIds: Set<string>
   pendingModeIds: Set<string>
 }): React.JSX.Element {
+  const { t } = useI18n()
   const [modeData, setModeData] = useState(mode)
   const [appType, setAppType] = useState<AppType>('wechat')
   const [showAddObjectModal, setShowAddObjectModal] = useState(false)
+  const [editingObject, setEditingObject] = useState<SpecificObject | null>(null)
   const [objectSearch, setObjectSearch] = useState('')
+  const [logExpanded, setLogExpanded] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+  const userScrolledRef = useRef(false)
 
   const logs = modeState.logs
   const recommendedReply = modeState.recommendedReply
@@ -534,40 +830,51 @@ function ModeSubInterface({
   }, [mode])
 
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
+    const el = logRef.current
+    if (!el) return
+    if (!userScrolledRef.current) {
+      el.scrollTop = el.scrollHeight
+    }
   }, [logs])
+
+  const handleLogScroll = useCallback(() => {
+    const el = logRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
+    userScrolledRef.current = !atBottom
+  }, [])
 
   const handleStart = useCallback(async () => {
     const settings = (await window.electron?.invoke('settings:getAll')) as AppSettings | undefined
     const visionModel = settings?.models?.find((m) => m.id === settings.globalVisionModelId)
     if (!visionModel && !settings?.vision?.apiKey) {
-      showToast('请先配置视觉模型', 'error')
+      showToast(t('toast.configVision'), 'error')
       return
     }
     updateModeState({ modeStarting: true })
     const result = await window.electron?.invoke('mode:start', mode.id)
     if (result?.success) {
       updateModeState({ modeRunning: true, modeStarting: false })
-      showToast('模式已启动', 'success')
+      showToast(t('toast.modeStarted'), 'success')
     } else {
       updateModeState({ modeStarting: false })
       if (result?.reason === 'default_mode_not_running') {
         showToast(result.message, 'error', 5000)
       } else {
-        showToast(result?.error || '启动失败', 'error')
+        showToast(result?.error || t('toast.modeStartFail'), 'error')
       }
     }
-  }, [mode.id, updateModeState])
+  }, [mode.id, updateModeState, t])
 
   const handleStop = useCallback(async () => {
     const result = await window.electron?.invoke('mode:stop', mode.id)
     if (result?.success) {
       updateModeState({ modeRunning: false })
-      showToast('模式已停止', 'success')
+      showToast(t('toast.modeStopped'), 'success')
     } else {
-      showToast(result?.error || '停止失败', 'error')
+      showToast(result?.error || t('toast.modeStopFail'), 'error')
     }
-  }, [mode.id, updateModeState])
+  }, [mode.id, updateModeState, t])
 
   const handleToggleAutoReply = useCallback(async () => {
     const next = !modeData.autoReply
@@ -588,9 +895,9 @@ function ModeSubInterface({
       }))
       onModesChanged()
     } else {
-      showToast(result?.error || '删除失败', 'error')
+      showToast(result?.error || t('object.delete.fail'), 'error')
     }
-  }, [modeData, onModesChanged])
+  }, [modeData, onModesChanged, t])
 
   const handleSend = useCallback(async () => {
     if (!recommendedReply) return
@@ -606,13 +913,25 @@ function ModeSubInterface({
 
   const handleSkip = useCallback(async () => {
     await window.electron?.invoke('engine:exitStandby', mode.id)
-    showToast('已跳过本次推荐回复', 'success')
-  }, [mode.id])
+    showToast(t('reply.skip.toast'), 'success')
+  }, [mode.id, t])
 
   const running = modeRunning
   const starting = modeStarting
-  const statusLabel = running ? '运行中' : starting ? '启动中' : '已停止'
-  const appTypeLabel = APP_TYPE_LABELS[appType] || appType
+  const statusLabel = running ? t('mode.running') : starting ? t('mode.starting') : t('mode.stopped')
+  const appTypeKey = `app.${appType}` as string
+  const appTypeLabel = t(appTypeKey) || APP_TYPE_LABELS[appType] || appType
+
+  const filteredObjects = modeData.specificObjects.filter((obj) => {
+    if (!objectSearch.trim()) return true
+    const q = objectSearch.trim()
+    if (obj.name === q) return true
+    try {
+      return new RegExp(q, 'i').test(obj.name)
+    } catch {
+      return obj.name.includes(q)
+    }
+  })
 
   return (
     <div className="mode-subinterface fade-in">
@@ -627,15 +946,15 @@ function ModeSubInterface({
         <div className="mode-header-right">
           {running ? (
             <button className="btn btn-stop" onClick={handleStop}>
-              <StopIcon /> 停止
+              <StopIcon /> {t('mode.stop')}
             </button>
           ) : starting ? (
             <button className="btn btn-starting" disabled>
-              <PlayIcon /> 启动中
+              <PlayIcon /> {t('mode.starting')}
             </button>
           ) : (
             <button className="btn btn-primary" onClick={handleStart} style={{ minWidth: 100, height: 28 }}>
-              <PlayIcon /> 启动
+              <PlayIcon /> {t('mode.start')}
             </button>
           )}
         </div>
@@ -643,11 +962,11 @@ function ModeSubInterface({
 
       <div className="mode-info-row">
         <div className="mode-info-item">
-          <span className="mode-info-label">目标应用</span>
+          <span className="mode-info-label">{t('mode.targetApp')}</span>
           <span className="mode-info-value">{appTypeLabel}</span>
         </div>
         <div className="mode-info-item">
-          <span className="mode-info-label">自动回复</span>
+          <span className="mode-info-label">{t('mode.autoReply')}</span>
           <label className="toggle-switch">
             <input type="checkbox" checked={modeData.autoReply} onChange={handleToggleAutoReply} />
             <span className="toggle-slider" />
@@ -655,19 +974,19 @@ function ModeSubInterface({
         </div>
         {modeData.sentimentEnabled && (
           <div className="mode-info-item">
-            <span className="mode-info-badge">情感分析</span>
+            <span className="mode-info-badge">{t('mode.sentiment')}</span>
           </div>
         )}
         {modeData.unifiedPrefix && (
           <div className="mode-info-item">
-            <span className="mode-info-badge">统一开头: {modeData.unifiedPrefix}</span>
+            <span className="mode-info-badge">{t('mode.unifiedPrefix')}: {modeData.unifiedPrefix}</span>
           </div>
         )}
       </div>
 
       <div className="card card-fixed-154">
         <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>特定对象</span>
+          <span>{t('object.specific')}</span>
           <div className="object-search-wrapper">
             <svg className="object-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8" />
@@ -676,80 +995,94 @@ function ModeSubInterface({
             <input
               className="form-input object-search-input"
               type="text"
-              placeholder="搜索对象"
+              placeholder={t('object.search')}
               value={objectSearch}
               onChange={(e) => setObjectSearch(e.target.value)}
             />
-            <button className="btn btn-secondary btn-sm object-search-btn">搜索</button>
+            <button className="btn btn-secondary btn-sm object-search-btn">{t('object.searchBtn')}</button>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)} style={{ marginLeft: 'auto', flexShrink: 0 }}>+添加对象</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddObjectModal(true)} style={{ marginLeft: 'auto', flexShrink: 0 }}>{t('object.add')}</button>
         </div>
-        {modeData.specificObjects.length === 0 ? (
-          <div className="object-list-empty">暂无特定对象</div>
+        {filteredObjects.length === 0 ? (
+          <div className="object-list-empty">{t('object.empty')}</div>
         ) : (
           <div className="object-list">
-            {modeData.specificObjects
-              .filter((obj) => {
-                if (!objectSearch.trim()) return true
-                const q = objectSearch.trim()
-                if (obj.name === q || obj.title === q || obj.relationship === q) return true
-                try {
-                  return new RegExp(q, 'i').test(obj.name) || new RegExp(q, 'i').test(obj.title || '') || new RegExp(q, 'i').test(obj.relationship || '')
-                } catch {
-                  return obj.name.includes(q) || (obj.title || '').includes(q) || (obj.relationship || '').includes(q)
-                }
-              })
-              .map((obj) => (
-              <div key={obj.id} className="object-item">
-                <div className="object-item-info">
-                  <span className="object-item-name">{obj.name}</span>
-                  {obj.title && <span className="object-item-detail">称呼: {obj.title}</span>}
-                  {obj.relationship && <span className="object-item-detail">关系: {obj.relationship}</span>}
-                </div>
-                <button className="btn btn-secondary btn-sm" style={{ color: '#ef4444' }} onClick={() => handleDeleteObject(obj.id)}>删除</button>
-              </div>
-            ))}
+            <table className="object-table">
+              <thead>
+                <tr>
+                  <th>{t('object.name')}</th>
+                  <th>{t('object.title')}</th>
+                  <th>{t('object.relationship')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredObjects.map((obj) => (
+                  <tr key={obj.id} onClick={() => setEditingObject(obj)} style={{ cursor: 'pointer' }}>
+                    <td>{obj.name}</td>
+                    <td>{obj.title || ''}</td>
+                    <td>{obj.relationship || ''}</td>
+                    <td className="object-action-cell">
+                      <button className="btn btn-secondary btn-sm" style={{ color: '#ef4444' }} onClick={(e) => { e.stopPropagation(); handleDeleteObject(obj.id) }}>{t('object.delete')}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
       <div className="card">
-        <div className="card-title">推荐回复</div>
+        <div className="card-title">{t('reply.recommended')}</div>
         <textarea
           className="form-input recommended-reply"
           value={recommendedReply}
           onChange={(e) => updateModeState({ recommendedReply: e.target.value })}
-          placeholder="AI 生成的推荐回复将显示在这里"
+          placeholder={t('reply.placeholder')}
           rows={3}
         />
         <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'center' }}>
-          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handlePaste}>一键粘贴</button>
-          <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>一键回复</button>
-          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handleSkip}>一键跳过</button>
+          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handlePaste}>{t('reply.paste')}</button>
+          <button className="btn btn-primary" disabled={!recommendedReply} onClick={handleSend}>{t('reply.send')}</button>
+          <button className="btn btn-secondary" disabled={!recommendedReply} onClick={handleSkip}>{t('reply.skip')}</button>
         </div>
         {pendingModeIds.has(modeData.id) && (
-          <div style={{ textAlign: 'center', color: '#f87171', fontSize: 11, marginTop: 4 }}>待处理</div>
+          <div style={{ textAlign: 'center', color: '#f87171', fontSize: 11, marginTop: 4 }}>{t('reply.pending')}</div>
         )}
         {!pendingModeIds.has(modeData.id) && standbyModeIds.has(modeData.id) && (
-          <div style={{ textAlign: 'center', color: '#f59e0b', fontSize: 11, marginTop: 4 }}>待机中</div>
+          <div style={{ textAlign: 'center', color: '#f59e0b', fontSize: 11, marginTop: 4 }}>{t('reply.standby')}</div>
         )}
       </div>
 
-      <div className="card card-fixed-194">
-        <div className="card-title">运行日志</div>
-        <div className="message-log message-log-fixed-160" ref={logRef}>
+      <div className={`card ${logExpanded ? 'card-log-expanded' : 'card-fixed-194'}`}>
+        <div className="card-title">{t('log.title')}</div>
+        <div
+          className={`message-log ${logExpanded ? 'message-log-expanded' : 'message-log-fixed-160'}`}
+          ref={logRef}
+          onScroll={handleLogScroll}
+        >
           {logs.length === 0 ? (
-            <div className="message-log-empty">暂无日志</div>
+            <div className="message-log-empty">{t('log.empty')}</div>
           ) : (
             logs.map((entry, i) => (
               <div className="log-entry" key={i}>
                 <span className="log-time">{entry.time}</span>
-                <span className={`log-type ${entry.type}`}>{entry.type}</span>
+                <span className={`log-type ${entry.type}`}>{t(`log.type.${entry.type}`)}</span>
                 <span>{entry.content}</span>
               </div>
             ))
           )}
         </div>
+        <button
+          className={`log-expand-btn ${logExpanded ? 'expanded' : ''}`}
+          onClick={() => setLogExpanded(!logExpanded)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+          {logExpanded ? t('log.collapse') : t('log.expand')}
+        </button>
       </div>
 
       {showAddObjectModal && (
@@ -766,6 +1099,92 @@ function ModeSubInterface({
           }}
         />
       )}
+
+      {editingObject && (
+        <EditObjectModal
+          modeId={modeData.id}
+          object={editingObject}
+          onClose={() => setEditingObject(null)}
+          onSaved={(updatedObj) => {
+            setModeData((prev) => ({
+              ...prev,
+              specificObjects: (prev.specificObjects || []).map((o) => o.id === updatedObj.id ? updatedObj : o)
+            }))
+            onModesChanged()
+            setEditingObject(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function EditObjectModal({
+  modeId,
+  object,
+  onClose,
+  onSaved
+}: {
+  modeId: string
+  object: SpecificObject
+  onClose: () => void
+  onSaved: (obj: SpecificObject) => void
+}): React.JSX.Element {
+  const { t } = useI18n()
+  const [name, setName] = useState(object.name)
+  const [title, setTitle] = useState(object.title || '')
+  const [relationship, setRelationship] = useState(object.relationship || '')
+  const [autoReply, setAutoReply] = useState<boolean | null>(object.autoReply)
+
+  const handleSave = useCallback(async () => {
+    if (!name.trim()) { showToast(t('object.name.required'), 'error'); return }
+    const result = await window.electron?.invoke('object:update', modeId, object.id, {
+      name: name.trim(),
+      title: title.trim(),
+      relationship: relationship.trim(),
+      autoReply
+    })
+    if (result?.success) {
+      showToast(t('object.updated') || '对象已更新', 'success')
+      onSaved(result.object)
+    } else {
+      showToast(result?.error || t('object.update.fail') || '更新失败', 'error')
+    }
+  }, [name, title, relationship, autoReply, modeId, object.id, onSaved, t])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>{t('object.editTitle') || '编辑特定对象'}</h2>
+        <div className="form-group">
+          <label className="form-label">{t('object.name')} <span className="required-mark">*</span></label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('object.name.placeholder')} />
+          <div className="form-hint">{t('object.name.hint')}</div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t('object.title.label')}</label>
+          <input className="form-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('object.title.placeholder')} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t('object.relationship')}</label>
+          <input className="form-input" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder={t('object.relationship.placeholder')} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t('object.autoReply')}</label>
+          <select className="form-input" value={autoReply === null ? '' : autoReply ? 'true' : 'false'} onChange={(e) => {
+            if (e.target.value === '') setAutoReply(null)
+            else setAutoReply(e.target.value === 'true')
+          }}>
+            <option value="">{t('object.autoReply.follow')}</option>
+            <option value="true">{t('object.autoReply.on')}</option>
+            <option value="false">{t('object.autoReply.off')}</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose}>{t('btn.cancel')}</button>
+          <button className="btn btn-primary" onClick={handleSave}>{t('btn.save')}</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -777,14 +1196,15 @@ function AddModeModal({
   onClose: () => void
   onSaved: () => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [prompt, setPrompt] = useState('')
   const [sentimentEnabled, setSentimentEnabled] = useState(false)
   const [unifiedPrefix, setUnifiedPrefix] = useState('')
 
   const handleSave = useCallback(async () => {
-    if (!name.trim()) { showToast('模式名称不能为空', 'error'); return }
-    if (!prompt.trim()) { showToast('回复规则不能为空', 'error'); return }
+    if (!name.trim()) { showToast(t('mode.name.required'), 'error'); return }
+    if (!prompt.trim()) { showToast(t('mode.prompt.required'), 'error'); return }
 
     const result = await window.electron?.invoke('mode:create', {
       name: name.trim(),
@@ -793,41 +1213,41 @@ function AddModeModal({
       unifiedPrefix
     })
     if (result?.success) {
-      showToast('模式已添加', 'success')
+      showToast(t('toast.modeAdded'), 'success')
       onSaved()
     } else {
-      showToast(result?.error || '添加失败', 'error')
+      showToast(result?.error || t('toast.addFail'), 'error')
     }
-  }, [name, prompt, sentimentEnabled, unifiedPrefix, onSaved])
+  }, [name, prompt, sentimentEnabled, unifiedPrefix, onSaved, t])
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, marginBottom: 16 }}>添加自定义模式</h2>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>{t('mode.addTitle')}</h2>
         <div className="form-group">
-          <label className="form-label">模式名称 <span className="required-mark">*</span></label>
-          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：高情商" />
+          <label className="form-label">{t('mode.name')} <span className="required-mark">*</span></label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('mode.name')} />
         </div>
         <div className="form-group">
-          <label className="form-label">回复规则 (Prompt) <span className="required-mark">*</span></label>
-          <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="AI 回复的引导提示词" rows={4} />
+          <label className="form-label">{t('mode.prompt')} <span className="required-mark">*</span></label>
+          <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('mode.prompt.placeholder')} rows={4} />
         </div>
         <div className="form-group">
-          <label className="form-label">情感分析</label>
+          <label className="form-label">{t('mode.sentiment')}</label>
           <label className="toggle-switch">
             <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
             <span className="toggle-slider" />
           </label>
-          <div className="form-hint">开启后该模式运行时使用情感分析</div>
+          <div className="form-hint">{t('mode.sentiment.hint')}</div>
         </div>
         <div className="form-group">
-          <label className="form-label">统一开头</label>
-          <input className="form-input" value={unifiedPrefix} onChange={(e) => setUnifiedPrefix(e.target.value)} placeholder="例如：【机器客服自动回复】" />
-          <div className="form-hint">回复内容前自动添加的文字</div>
+          <label className="form-label">{t('mode.unifiedPrefix')}</label>
+          <input className="form-input" value={unifiedPrefix} onChange={(e) => setUnifiedPrefix(e.target.value)} placeholder={t('mode.unifiedPrefix.placeholder')} />
+          <div className="form-hint">{t('mode.unifiedPrefix.hint')}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button className="btn btn-secondary" onClick={onClose}>取消</button>
-          <button className="btn btn-primary" onClick={handleSave}>添加</button>
+          <button className="btn btn-secondary" onClick={onClose}>{t('btn.cancel')}</button>
+          <button className="btn btn-primary" onClick={handleSave}>{t('btn.add')}</button>
         </div>
       </div>
     </div>
@@ -844,6 +1264,7 @@ function AddObjectModal({
   onClose: () => void
   onSaved: (obj: SpecificObject) => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [title, setTitle] = useState('')
   const [relationship, setRelationship] = useState('')
@@ -851,7 +1272,7 @@ function AddObjectModal({
   const [autoReply, setAutoReply] = useState<boolean | null>(null)
 
   const handleSave = useCallback(async () => {
-    if (!name.trim()) { showToast('对象名称不能为空', 'error'); return }
+    if (!name.trim()) { showToast(t('object.name.required'), 'error'); return }
     const result = await window.electron?.invoke('object:create', modeId, {
       name: name.trim(),
       title: title.trim(),
@@ -860,100 +1281,102 @@ function AddObjectModal({
       autoReply
     })
     if (result?.success) {
-      showToast('特定对象已添加', 'success')
+      showToast(t('object.added'), 'success')
       onSaved(result.object)
     } else {
-      showToast(result?.error || '添加失败', 'error')
+      showToast(result?.error || t('object.add.fail'), 'error')
     }
-  }, [name, title, relationship, targetModeId, autoReply, modeId, onSaved])
+  }, [name, title, relationship, targetModeId, autoReply, modeId, onSaved, t])
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, marginBottom: 16 }}>添加特定对象</h2>
+        <h2 style={{ marginTop: 0, marginBottom: 16 }}>{t('object.addTitle')}</h2>
         <div className="form-group">
-          <label className="form-label">名称 <span className="required-mark">*</span></label>
-          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="对方在聊天软件中的名称" />
-          <div className="form-hint">用于 VLM 匹配识别</div>
+          <label className="form-label">{t('object.name')} <span className="required-mark">*</span></label>
+          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('object.name.placeholder')} />
+          <div className="form-hint">{t('object.name.hint')}</div>
         </div>
         <div className="form-group">
-          <label className="form-label">特定称呼</label>
-          <input className="form-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如：老张、王总" />
+          <label className="form-label">{t('object.title.label')}</label>
+          <input className="form-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('object.title.placeholder')} />
         </div>
         <div className="form-group">
-          <label className="form-label">关系</label>
-          <input className="form-input" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="例如：姐姐、老板" />
+          <label className="form-label">{t('object.relationship')}</label>
+          <input className="form-input" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder={t('object.relationship.placeholder')} />
         </div>
         <div className="form-group">
-          <label className="form-label">自动回复</label>
+          <label className="form-label">{t('object.autoReply')}</label>
           <select className="form-input" value={autoReply === null ? '' : autoReply ? 'true' : 'false'} onChange={(e) => {
             if (e.target.value === '') setAutoReply(null)
             else setAutoReply(e.target.value === 'true')
           }}>
-            <option value="">跟随模式设置</option>
-            <option value="true">开启</option>
-            <option value="false">关闭</option>
+            <option value="">{t('object.autoReply.follow')}</option>
+            <option value="true">{t('object.autoReply.on')}</option>
+            <option value="false">{t('object.autoReply.off')}</option>
           </select>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button className="btn btn-secondary" onClick={onClose}>取消</button>
-          <button className="btn btn-primary" onClick={handleSave}>添加</button>
+          <button className="btn btn-secondary" onClick={onClose}>{t('btn.cancel')}</button>
+          <button className="btn btn-primary" onClick={handleSave}>{t('btn.add')}</button>
         </div>
       </div>
     </div>
   )
 }
 
-function SettingsWindow(): React.JSX.Element {
+function SettingsWindow({ theme, setTheme }: { theme: 'dark' | 'light'; setTheme: (th: 'dark' | 'light') => void }): React.JSX.Element {
+  const { t, locale, setLocale } = useI18n()
   const [section, setSection] = useState<SettingsSection>('base')
 
   return (
     <div className="settings-shell">
       <aside className="settings-sidebar">
         <div className="settings-sidebar-brand">
-          <img src={logoUrl} alt="AutoReply" className="app-logo" />
-          <span>设置</span>
+          <img src={theme === 'light' ? logoBlackUrl : logoUrl} alt="AutoReply" className="app-logo" />
+          <span>{t('settings.title')}</span>
         </div>
         <button
           className={`settings-nav-item ${section === 'base' ? 'active' : ''}`}
           onClick={() => setSection('base')}
         >
-          基础配置
+          {t('settings.base')}
         </button>
         <button
           className={`settings-nav-item ${section === 'model' ? 'active' : ''}`}
           onClick={() => setSection('model')}
         >
-          模型配置
+          {t('settings.model')}
         </button>
         <button
           className={`settings-nav-item ${section === 'training' ? 'active' : ''}`}
           onClick={() => setSection('training')}
         >
-          模型训练
+          {t('settings.training')}
         </button>
         <button
           className={`settings-nav-item ${section === 'mode' ? 'active' : ''}`}
           onClick={() => setSection('mode')}
         >
-          模式管理
+          {t('settings.mode')}
         </button>
         <button
           className={`settings-nav-item ${section === 'agent' ? 'active' : ''}`}
           onClick={() => setSection('agent')}
         >
-          智能体
+          {t('settings.agent')}
         </button>
       </aside>
 
       <main className="settings-main">
-        {section === 'base' ? <SettingsPanel /> : section === 'model' ? <ModelConfigPanel /> : section === 'training' ? <TrainingPanel /> : section === 'mode' ? <ModeManagePanel /> : <AgentPanel />}
+        {section === 'base' ? <SettingsPanel theme={theme} setTheme={setTheme} locale={locale} setLocale={setLocale} /> : section === 'model' ? <ModelConfigPanel /> : section === 'training' ? <TrainingPanel /> : section === 'mode' ? <ModeManagePanel /> : <AgentPanel />}
       </main>
     </div>
   )
 }
 
-function SettingsPanel() {
+function SettingsPanel({ theme, setTheme, locale, setLocale }: { theme: 'dark' | 'light'; setTheme: (th: 'dark' | 'light') => void; locale: Locale; setLocale: (l: Locale) => void }) {
+  const { t } = useI18n()
   const [models, setModels] = useState<ModelConfig[]>([])
   const [globalVisionModelId, setGlobalVisionModelId] = useState('')
   const [globalReplyModelId, setGlobalReplyModelId] = useState('')
@@ -976,32 +1399,58 @@ function SettingsPanel() {
     try {
       const result = await window.electron?.invoke('model:testConnection', modelId)
       if (result?.success) {
-        showToast('连接测试成功', 'success')
+        showToast(t('toast.connectionOk'), 'success')
       } else {
-        showToast(`连接测试失败: ${result?.error || ''}`, 'error')
+        showToast(`${t('toast.connectionFail')}: ${result?.error || ''}`, 'error')
       }
     } catch (e: any) {
-      showToast(`连接测试失败: ${e.message}`, 'error')
+      showToast(`${t('toast.connectionFail')}: ${e.message}`, 'error')
     }
-  }, [])
+  }, [t])
 
   return (
     <div className="settings-page">
       <div className="settings-page-header">
         <div>
-          <h1>基础配置</h1>
-          <p>维护桌面端运行所需的基础参数。</p>
+          <h1>{t('settings.base')}</h1>
+          <p>{t('settings.base.desc')}</p>
         </div>
       </div>
 
       <div className="card base-settings-card">
-        <div className="card-title">全局模型选择</div>
+        <div className="card-title">{t('settings.basic')}</div>
+        <div className="settings-inline-row">
+          <span className="settings-inline-label">{t('settings.appearance')}</span>
+          <select
+            className="form-input settings-inline-select"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as 'dark' | 'light')}
+          >
+            <option value="dark">{t('settings.appearance.dark')}</option>
+            <option value="light">{t('settings.appearance.light')}</option>
+          </select>
+        </div>
+        <div className="settings-inline-row">
+          <span className="settings-inline-label">{t('settings.language')}</span>
+          <select
+            className="form-input settings-inline-select"
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as Locale)}
+          >
+            <option value="zh">{t('settings.language.zh')}</option>
+            <option value="en">{t('settings.language.en')}</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="card base-settings-card">
+        <div className="card-title">{t('settings.globalModel')}</div>
         <div className="form-hint" style={{ marginBottom: 12 }}>
-          选择用于视觉检测和回复生成的模型。如需添加新模型，请前往"模型配置"页面。
+          {t('settings.globalModel.hint')}
         </div>
 
         <div className="form-group">
-          <label className="form-label">全局视觉模型</label>
+          <label className="form-label">{t('settings.visionModel')}</label>
           <select
             className="form-input"
             value={globalVisionModelId}
@@ -1011,16 +1460,16 @@ function SettingsPanel() {
               await window.electron?.invoke('settings:set', { globalVisionModelId: id })
             }}
           >
-            <option value="">请选择视觉模型</option>
+            <option value="">{t('settings.selectVisionModel')}</option>
             {models.filter((m) => (m.capabilities || []).includes('vision')).map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
             ))}
           </select>
-          <div className="form-hint">用于 VLM 布局检测、红点检测、对象识别</div>
+          <div className="form-hint">{t('settings.visionModel.hint')}</div>
         </div>
 
         <div className="form-group">
-          <label className="form-label">全局回复模型</label>
+          <label className="form-label">{t('settings.replyModel')}</label>
           <select
             className="form-input"
             value={globalReplyModelId}
@@ -1030,12 +1479,12 @@ function SettingsPanel() {
               await window.electron?.invoke('settings:set', { globalReplyModelId: id })
             }}
           >
-            <option value="">请选择回复模型</option>
+            <option value="">{t('settings.selectReplyModel')}</option>
             {models.filter((m) => (m.capabilities || []).includes('text')).map((m) => (
               <option key={m.id} value={m.id}>{m.name} ({m.modelName})</option>
             ))}
           </select>
-          <div className="form-hint">用于 AI 回复生成</div>
+          <div className="form-hint">{t('settings.replyModel.hint')}</div>
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
@@ -1044,7 +1493,7 @@ function SettingsPanel() {
             onClick={() => handleTestConnection(globalVisionModelId)}
             disabled={!globalVisionModelId}
           >
-            测试连接
+            {t('settings.testConnection')}
           </button>
         </div>
       </div>

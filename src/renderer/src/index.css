@@ -1453,6 +1453,18 @@ select option {
   min-height: unset;
 }
 
+.message-log-expanded {
+  min-height: 240px;
+  max-height: 240px;
+  height: 240px;
+  overflow-y: auto;
+}
+
+.card-log-expanded {
+  height: auto;
+  overflow: visible;
+}
+
 /* ─── Work Memory（工作记忆窗口） ─── */
 .memory-shell {
   display: grid;
@@ -1876,4 +1888,236 @@ select option {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.55;
+}
+
+/* ─── Light Theme ─── */
+[data-theme="light"] {
+  --bg-primary: #f5f5f8;
+  --bg-glass: rgba(0, 0, 0, 0.03);
+  --bg-glass-heavy: rgba(0, 0, 0, 0.06);
+  --bg-glass-input: rgba(0, 0, 0, 0.05);
+  --bg-frosted: rgba(245, 245, 248, 0.85);
+
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a62;
+  --text-muted: #7a7a92;
+
+  --accent: #059669;
+  --accent-hover: #10b981;
+  --accent-glow: rgba(5, 150, 105, 0.25);
+  --accent-subtle: rgba(5, 150, 105, 0.08);
+
+  --success: #059669;
+  --success-bg: rgba(5, 150, 105, 0.08);
+  --error: #dc2626;
+  --error-bg: rgba(220, 38, 38, 0.06);
+  --warning: #d97706;
+
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-light: rgba(0, 0, 0, 0.14);
+}
+
+[data-theme="light"] .app::before {
+  background: radial-gradient(circle, rgba(5, 150, 105, 0.06) 0%, transparent 70%);
+}
+
+[data-theme="light"] .app::after {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.04) 0%, transparent 70%);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .log-entry {
+  border-bottom-color: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] select option {
+  background: #ffffff;
+  color: #1a1a2e;
+}
+
+[data-theme="light"] .modal-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .modal-content {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .spinner {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: var(--accent);
+}
+
+[data-theme="light"] .toggle-slider {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .toggle-slider::before {
+  background: #5a5a72;
+}
+
+[data-theme="light"] .btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+[data-theme="light"] .btn-primary {
+  color: #fff;
+}
+
+[data-theme="light"] .provider-status {
+  background: rgba(5, 150, 105, 0.1);
+}
+
+[data-theme="light"] .mode-status-dot.idle {
+  background: #9ca3af;
+}
+
+[data-theme="light"] .toast.success {
+  background: rgba(5, 150, 105, 0.1);
+  border-color: rgba(5, 150, 105, 0.2);
+}
+
+[data-theme="light"] .toast.error {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.15);
+}
+
+[data-theme="light"] body,
+[data-theme="light"] .app {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 400;
+}
+
+[data-theme="light"] .card-title,
+[data-theme="light"] .form-label,
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] .mode-name,
+[data-theme="light"] .settings-inline-label,
+[data-theme="light"] .mode-info-label,
+[data-theme="light"] .step-detail-label {
+  font-weight: 600;
+}
+
+[data-theme="light"] .mode-info-value,
+[data-theme="light"] .mode-status,
+[data-theme="light"] .settings-nav-item,
+[data-theme="light"] .main-sidebar-item,
+[data-theme="light"] .btn {
+  font-weight: 500;
+}
+
+/* ─── Object Table ─── */
+.object-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.object-table thead th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+.object-table tbody td {
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="light"] .object-table tbody td {
+  border-bottom-color: rgba(0, 0, 0, 0.04);
+}
+
+.object-table tbody td:first-child {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.object-table tbody tr:hover {
+  background: var(--bg-glass-heavy);
+}
+
+.object-table .object-action-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ─── Log Expand ─── */
+.log-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px 0;
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.log-expand-btn:hover {
+  color: var(--text-primary);
+}
+
+.log-expand-btn svg {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--transition-normal);
+}
+
+.log-expand-btn.expanded svg {
+  transform: rotate(180deg);
+}
+
+/* ─── Settings Inline Row ─── */
+.settings-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.settings-inline-row:last-child {
+  border-bottom: none;
+}
+
+.settings-inline-label {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.settings-inline-select {
+  width: 140px;
 }

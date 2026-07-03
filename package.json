@@ -1,6 +1,6 @@
 {
   "name": "autoreply-desktop-agent",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "AutoReply 智能回复助手 - AI-powered cross-platform desktop RPA client based on Electron and VLM",
   "main": "./out/main/index.js",
   "author": "autoreply-dev",

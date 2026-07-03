@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, desktopCapturer, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, desktopCapturer, nativeImage, nativeTheme } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -71,6 +71,7 @@ interface PerAppCapture {
 
 interface AppSettings {
   locale: 'zh' | 'en'
+  theme: 'dark' | 'light'
   appType: AppType
   vision: {
     apiKey: string
@@ -147,6 +148,7 @@ const settingsStore = new StoreClass({
   name: 'settings',
   defaults: {
     locale: 'zh',
+    theme: 'dark',
     appType: 'wechat',
     vision: { apiKey: '', model: FIXED_ARK_MODEL, baseURL: FIXED_ARK_BASE_URL },
     chatProvider: {
@@ -468,10 +470,11 @@ async function fetchProviderHub(url = DEFAULT_PROVIDER_HUB_URL): Promise<Provide
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
-  // Set app user model id for windows
   electronApp.setAppUserModelId('com.autoreply.desktop')
 
-  // 预先创建情感分析模型目录
+  const initialSettings = normalizeSettings(settingsStore.store)
+  nativeTheme.themeSource = initialSettings.theme === 'light' ? 'light' : 'dark'
+
   const modelDir = sentimentModelDir()
   try {
     mkdirSync(modelDir, { recursive: true })
@@ -529,10 +532,17 @@ app.whenReady().then(async () => {
       globalReplyModelId: typeof data.globalReplyModelId === 'string' ? data.globalReplyModelId : current.globalReplyModelId,
       modes: Array.isArray(data.modes) ? data.modes : current.modes,
       globalDefaultModeId: typeof data.globalDefaultModeId === 'string' ? data.globalDefaultModeId : current.globalDefaultModeId,
-      globalAutoReply: typeof data.globalAutoReply === 'boolean' ? data.globalAutoReply : current.globalAutoReply
+      globalAutoReply: typeof data.globalAutoReply === 'boolean' ? data.globalAutoReply : current.globalAutoReply,
+      theme: data.theme === 'light' || data.theme === 'dark' ? data.theme : current.theme
     } satisfies AppSettings
 
     settingsStore.set(next as any)
+    const bgColor = next.theme === 'light' ? '#f5f5f8' : '#0a0b10'
+    nativeTheme.themeSource = next.theme === 'light' ? 'light' : 'dark'
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('settings:changed', { theme: next.theme, locale: next.locale })
+      win.setBackgroundColor(bgColor)
+    }
     return { success: true }
   })
 
@@ -894,6 +904,33 @@ app.whenReady().then(async () => {
     settingsStore.set({ ...settings, modes: allModes } as any)
     return { success: true }
   })
+
+  ipcMain.handle('object:update', async (_event, modeId: string, objectId: string, patch: Partial<SpecificObject>) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false, error: '无效的模式 ID' }
+    if (typeof objectId !== 'string' || !objectId) return { success: false, error: '无效的对象 ID' }
+    const settings = normalizeSettings(settingsStore.store)
+    const allModes = ensureSystemModes(settings.modes)
+    const mode = allModes.find((m) => m.id === modeId)
+    if (!mode) return { success: false, error: '模式不存在' }
+
+    const obj = (mode.specificObjects || []).find((o) => o.id === objectId)
+    if (!obj) return { success: false, error: '对象不存在' }
+
+    if (typeof patch?.name === 'string' && patch.name.trim()) {
+      const allObjects = allModes.flatMap((m) => m.specificObjects || [])
+      const duplicate = allObjects.find((o) => o.name === patch.name!.trim() && o.id !== objectId)
+      if (duplicate) return { success: false, error: '该对象名称已存在' }
+      obj.name = patch.name.trim()
+    }
+    if (typeof patch?.title === 'string') obj.title = patch.title
+    if (typeof patch?.relationship === 'string') obj.relationship = patch.relationship
+    if (typeof patch?.autoReply === 'boolean' || patch?.autoReply === null) obj.autoReply = patch.autoReply
+
+    mode.updatedAt = Date.now()
+    settingsStore.set({ ...settings, modes: allModes } as any)
+    return { success: true, object: obj }
+  })
+
   ipcMain.handle('reply:paste', async (_event, text: string) => {
     if (typeof text !== 'string' || !text) return { success: false, error: '文本为空' }
     const { clipboard } = await import('electron')
@@ -1902,6 +1939,7 @@ function normalizeSettings(raw: any): AppSettings {
 
   return {
     locale: raw?.locale === 'en' ? 'en' : 'zh',
+    theme: raw?.theme === 'light' ? 'light' : 'dark',
     appType: coerceAppType(raw?.appType),
     vision,
     chatProvider: {

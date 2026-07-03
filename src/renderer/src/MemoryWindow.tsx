@@ -6,7 +6,137 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import logoUrl from './assets/logo.png'
+import logoBlackUrl from './assets/logo_black.png'
 import { showToast } from './App'
+
+type Locale = 'zh' | 'en'
+
+const memoryTranslations: Record<Locale, Record<string, string>> = {
+  zh: {
+    'memory.title': '工作记忆',
+    'memory.traces': '执行轨迹',
+    'memory.cards': '经验卡片',
+    'memory.noTrace': '还没有轨迹。启动引擎跑一轮，每一步都会被记录在这里。',
+    'memory.noStep': '本次执行还没有步骤。',
+    'memory.selectSession': '左侧选择一次执行，查看完整工作轨迹。',
+    'memory.clickStep': '点击左侧步骤查看细节与回放。',
+    'memory.noCard': '还没有经验。在「执行轨迹」里点「从这次轨迹学习」，或对某一步做人工纠正。',
+    'memory.cardDesc': '启用中的卡片会在每轮判断前注入给智能体，被引用与成功次数自动统计。',
+    'memory.learn': '从这次轨迹学习',
+    'memory.learning': '归纳中...',
+    'memory.learned': '已沉淀 {count} 条经验',
+    'memory.noExp': '本次轨迹暂无可沉淀的经验',
+    'memory.learnFail': '经验沉淀失败',
+    'memory.cardDeleted': '经验卡片已删除',
+    'memory.ongoing': '进行中',
+    'memory.steps': '步',
+    'memory.unknownModel': '未知模型',
+    'memory.replay': '回放',
+    'memory.pause': '暂停',
+    'memory.noScreenshot': '本步无界面截图',
+    'memory.summary': '摘要',
+    'memory.reasoning': '判断依据',
+    'memory.action': '动作',
+    'memory.result': '结果',
+    'memory.refExp': '引用经验',
+    'memory.refExpDesc': '{count} 条团队经验参与了本步判断',
+    'memory.correct': '纠正这一步 → 沉淀为经验',
+    'memory.correction': '人工纠正',
+    'memory.scenario': '什么情况下（场景）',
+    'memory.scenarioPlaceholder': '例如：客户询问报价时',
+    'memory.guidance': '应该怎么做',
+    'memory.guidancePlaceholder': '例如：先确认具体需求和数量，再给出报价区间，不要直接报最低价',
+    'memory.why': '为什么（可选）',
+    'memory.whyPlaceholder': '例如：直接报价容易被比价，先了解需求才能匹配方案',
+    'memory.saveExp': '保存经验',
+    'memory.saving': '保存中...',
+    'memory.saved': '已沉淀为团队经验，下一轮立即生效',
+    'memory.saveFail': '保存失败',
+    'memory.fillRequired': '请填写场景和正确做法',
+    'memory.disable': '停用',
+    'memory.enable': '启用',
+    'memory.delete': '删除',
+    'memory.whyLabel': '为什么：',
+    'memory.used': '被引用',
+    'memory.times': '次',
+    'memory.success': '成功',
+    'memory.human': '人工',
+    'memory.expRef': '经验×{count}',
+    'memory.ok': '成功',
+    'memory.fail': '失败',
+    'memory.skip': '跳过',
+    'phase.observe': '观察',
+    'phase.think': '判断',
+    'phase.act': '动作',
+    'phase.verify': '验证',
+    'source.agent_summary': '轨迹归纳',
+    'source.human_takeover': '人工纠正',
+    'source.manual': '手动录入',
+    'btn.cancel': '取消'
+  },
+  en: {
+    'memory.title': 'Working Memory',
+    'memory.traces': 'Traces',
+    'memory.cards': 'Experience Cards',
+    'memory.noTrace': 'No traces yet. Start the engine and run a round — every step will be recorded here.',
+    'memory.noStep': 'No steps in this session yet.',
+    'memory.selectSession': 'Select a session from the sidebar to view the full trace.',
+    'memory.clickStep': 'Click a step on the left to view details and replay.',
+    'memory.noCard': 'No experience cards yet. Click "Learn from this trace" in Traces, or correct a step.',
+    'memory.cardDesc': 'Enabled cards are injected into the agent before each judgment. Usage and success counts are tracked automatically.',
+    'memory.learn': 'Learn from this trace',
+    'memory.learning': 'Learning...',
+    'memory.learned': 'Distilled {count} experience cards',
+    'memory.noExp': 'No distillable experience from this trace',
+    'memory.learnFail': 'Failed to distill experience',
+    'memory.cardDeleted': 'Experience card deleted',
+    'memory.ongoing': 'Ongoing',
+    'memory.steps': 'steps',
+    'memory.unknownModel': 'Unknown model',
+    'memory.replay': 'Replay',
+    'memory.pause': 'Pause',
+    'memory.noScreenshot': 'No screenshot for this step',
+    'memory.summary': 'Summary',
+    'memory.reasoning': 'Reasoning',
+    'memory.action': 'Action',
+    'memory.result': 'Result',
+    'memory.refExp': 'Ref experience',
+    'memory.refExpDesc': '{count} team experience cards contributed to this step',
+    'memory.correct': 'Correct this step → Save as experience',
+    'memory.correction': 'Human Correction',
+    'memory.scenario': 'When (scenario)',
+    'memory.scenarioPlaceholder': 'e.g. When a customer asks for a quote',
+    'memory.guidance': 'What to do',
+    'memory.guidancePlaceholder': 'e.g. Confirm specific needs and quantity first, then provide a price range',
+    'memory.why': 'Why (optional)',
+    'memory.whyPlaceholder': 'e.g. Direct pricing invites comparison; understanding needs first enables better matching',
+    'memory.saveExp': 'Save Experience',
+    'memory.saving': 'Saving...',
+    'memory.saved': 'Saved as team experience, takes effect next round',
+    'memory.saveFail': 'Save failed',
+    'memory.fillRequired': 'Please fill in scenario and guidance',
+    'memory.disable': 'Disable',
+    'memory.enable': 'Enable',
+    'memory.delete': 'Delete',
+    'memory.whyLabel': 'Why: ',
+    'memory.used': 'Used',
+    'memory.times': 'times',
+    'memory.success': 'success',
+    'memory.human': 'Human',
+    'memory.expRef': 'Exp×{count}',
+    'memory.ok': 'OK',
+    'memory.fail': 'Fail',
+    'memory.skip': 'Skip',
+    'phase.observe': 'Observe',
+    'phase.think': 'Think',
+    'phase.act': 'Act',
+    'phase.verify': 'Verify',
+    'source.agent_summary': 'Trace Summary',
+    'source.human_takeover': 'Human Fix',
+    'source.manual': 'Manual',
+    'btn.cancel': 'Cancel'
+  }
+}
 
 // ── 与 src/core/trace / memory 对齐的本地类型（renderer 约定：不跨层 import） ──
 
@@ -49,25 +179,12 @@ interface ExperienceCard {
   createdAt: number
 }
 
-const PHASE_LABELS: Record<TracePhase, string> = {
-  observe: '观察',
-  think: '判断',
-  act: '动作',
-  verify: '验证'
+function formatTime(ts: number, locale?: Locale): string {
+  return new Date(ts).toLocaleTimeString(locale === 'en' ? 'en-US' : 'zh-CN', { hour12: false })
 }
 
-const SOURCE_LABELS: Record<ExperienceCard['source'], string> = {
-  agent_summary: '轨迹归纳',
-  human_takeover: '人工纠正',
-  manual: '手动录入'
-}
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
-}
-
-function formatDateTime(ts: number): string {
-  return new Date(ts).toLocaleString('zh-CN', { hour12: false })
+function formatDateTime(ts: number, locale?: Locale): string {
+  return new Date(ts).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN', { hour12: false })
 }
 
 // 截图 dataURL 缓存：同一截图在缩略图和回放大图间复用
@@ -120,6 +237,44 @@ export default function MemoryWindow(): React.JSX.Element {
   const [steps, setSteps] = useState<TraceStep[]>([])
   const [cards, setCards] = useState<ExperienceCard[]>([])
   const [learning, setLearning] = useState(false)
+  const [locale, setLocaleState] = useState<Locale>('zh')
+  const [theme, setThemeState] = useState<'dark' | 'light'>('dark')
+
+  const t = useCallback((key: string, params?: Record<string, string | number>): string => {
+    let text = memoryTranslations[locale]?.[key] ?? memoryTranslations.zh[key] ?? key
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        text = text.replace(`{${k}}`, String(v))
+      })
+    }
+    return text
+  }, [locale])
+
+  useEffect(() => {
+    const load = async () => {
+      const settings = (await window.electron?.invoke('settings:getAll')) as { locale?: string; theme?: string } | undefined
+      if (settings) {
+        setLocaleState(settings.locale === 'en' ? 'en' : 'zh')
+        const th = settings.theme === 'light' ? 'light' : 'dark'
+        setThemeState(th)
+        document.documentElement.setAttribute('data-theme', th)
+      }
+    }
+    void load()
+  }, [])
+
+  useEffect(() => {
+    const cleanup = window.electron?.on('settings:changed', (data: { theme?: string; locale?: string }) => {
+      if (data.theme === 'light' || data.theme === 'dark') {
+        setThemeState(data.theme as 'dark' | 'light')
+        document.documentElement.setAttribute('data-theme', data.theme)
+      }
+      if (data.locale === 'zh' || data.locale === 'en') {
+        setLocaleState(data.locale as Locale)
+      }
+    })
+    return cleanup ?? (() => {})
+  }, [])
 
   const reloadSessions = useCallback(async () => {
     const list = ((await window.electron?.invoke('trace:listSessions')) ?? []) as TraceSessionMeta[]
@@ -197,13 +352,13 @@ export default function MemoryWindow(): React.JSX.Element {
       )) as { success: boolean; error?: string; cards?: ExperienceCard[] }
       if (result?.success) {
         const count = result.cards?.length ?? 0
-        showToast(count > 0 ? `已沉淀 ${count} 条经验` : '本次轨迹暂无可沉淀的经验', 'success')
+        showToast(count > 0 ? t('memory.learned', { count }) : t('memory.noExp'), 'success')
         if (count > 0) {
           await reloadCards()
           setView('cards')
         }
       } else {
-        showToast(result?.error || '经验沉淀失败', 'error')
+        showToast(result?.error || t('memory.learnFail'), 'error')
       }
     } finally {
       setLearning(false)
@@ -214,28 +369,28 @@ export default function MemoryWindow(): React.JSX.Element {
     <div className="memory-shell">
       <aside className="memory-sidebar">
         <div className="settings-sidebar-brand">
-          <img src={logoUrl} alt="AutoReply" className="app-logo" />
-          <span>工作记忆</span>
+          <img src={theme === 'light' ? logoBlackUrl : logoUrl} alt="AutoReply" className="app-logo" />
+          <span>{t('memory.title')}</span>
         </div>
 
         <button
           className={`settings-nav-item ${view === 'traces' ? 'active' : ''}`}
           onClick={() => setView('traces')}
         >
-          执行轨迹
+          {t('memory.traces')}
         </button>
         <button
           className={`settings-nav-item ${view === 'cards' ? 'active' : ''}`}
           onClick={() => setView('cards')}
         >
-          经验卡片{cards.length > 0 ? `（${cards.length}）` : ''}
+          {t('memory.cards')}{cards.length > 0 ? `（${cards.length}）` : ''}
         </button>
 
         {view === 'traces' ? (
           <div className="memory-session-list">
             {sessions.length === 0 ? (
               <div className="memory-empty">
-                还没有轨迹。启动引擎跑一轮，每一步都会被记录在这里。
+                {t('memory.noTrace')}
               </div>
             ) : (
               sessions.map((session) => (
@@ -246,11 +401,11 @@ export default function MemoryWindow(): React.JSX.Element {
                   }`}
                   onClick={() => setSelectedSessionId(session.sessionId)}
                 >
-                  <div className="memory-session-time">{formatDateTime(session.startedAt)}</div>
+                  <div className="memory-session-time">{formatDateTime(session.startedAt, locale)}</div>
                   <div className="memory-session-meta">
                     <span>{session.appType}</span>
-                    <span>{session.stepCount} 步</span>
-                    {!session.endedAt ? <span className="memory-live-dot">● 进行中</span> : null}
+                    <span>{session.stepCount} {t('memory.steps')}</span>
+                    {!session.endedAt ? <span className="memory-live-dot">● {t('memory.ongoing')}</span> : null}
                   </div>
                 </button>
               ))
@@ -267,9 +422,11 @@ export default function MemoryWindow(): React.JSX.Element {
             learning={learning}
             onLearn={handleLearn}
             onCardAdded={reloadCards}
+            t={t}
+            locale={locale}
           />
         ) : (
-          <CardsView cards={cards} onChanged={reloadCards} />
+          <CardsView cards={cards} onChanged={reloadCards} t={t} />
         )}
       </main>
     </div>
@@ -283,13 +440,17 @@ function TraceView({
   steps,
   learning,
   onLearn,
-  onCardAdded
+  onCardAdded,
+  t,
+  locale
 }: {
   session: TraceSessionMeta | null
   steps: TraceStep[]
   learning: boolean
   onLearn: () => void
   onCardAdded: () => Promise<void> | void
+  t: (key: string, params?: Record<string, string | number>) => string
+  locale: Locale
 }): React.JSX.Element {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -323,7 +484,7 @@ function TraceView({
 
   if (!session) {
     return (
-      <div className="memory-empty memory-empty-main">左侧选择一次执行，查看完整工作轨迹。</div>
+      <div className="memory-empty memory-empty-main">{t('memory.selectSession')}</div>
     )
   }
 
@@ -331,10 +492,10 @@ function TraceView({
     <div className="memory-trace-view">
       <div className="memory-trace-header">
         <div>
-          <h1>{formatDateTime(session.startedAt)}</h1>
+          <h1>{formatDateTime(session.startedAt, locale)}</h1>
           <p>
-            {session.appType} · {session.model || session.providerId || '未知模型'} · {steps.length}{' '}
-            步{session.endedAt ? '' : ' · 进行中'}
+            {session.appType} · {session.model || session.providerId || t('memory.unknownModel')} · {steps.length}{' '}
+            {t('memory.steps')}{session.endedAt ? '' : ` · ${t('memory.ongoing')}`}
           </p>
         </div>
         <button
@@ -342,7 +503,7 @@ function TraceView({
           onClick={onLearn}
           disabled={learning || steps.length === 0}
         >
-          {learning ? '归纳中...' : '从这次轨迹学习'}
+          {learning ? t('memory.learning') : t('memory.learn')}
         </button>
       </div>
 
@@ -359,24 +520,24 @@ function TraceView({
             >
               <div className="trace-step-top">
                 <span className={`phase-badge phase-${step.phase}`}>
-                  {PHASE_LABELS[step.phase]}
+                  {t(`phase.${step.phase}`)}
                 </span>
                 <span className="trace-step-time">
-                  #{step.seq} · {formatTime(step.ts)}
+                  #{step.seq} · {formatTime(step.ts, locale)}
                 </span>
-                {step.actor === 'human' ? <span className="actor-badge">人工</span> : null}
+                {step.actor === 'human' ? <span className="actor-badge">{t('memory.human')}</span> : null}
                 {step.reasoning?.memoryRefs?.length ? (
-                  <span className="memory-ref-badge" title="本步引用了团队经验">
-                    📎 经验×{step.reasoning.memoryRefs.length}
+                  <span className="memory-ref-badge" title={t('memory.refExp')}>
+                    📎 {t('memory.expRef', { count: step.reasoning.memoryRefs.length })}
                   </span>
                 ) : null}
                 {step.outcome ? (
                   <span className={`outcome-badge outcome-${step.outcome.status}`}>
                     {step.outcome.status === 'ok'
-                      ? '成功'
+                      ? t('memory.ok')
                       : step.outcome.status === 'fail'
-                        ? '失败'
-                        : '跳过'}
+                        ? t('memory.fail')
+                        : t('memory.skip')}
                   </span>
                 ) : null}
               </div>
@@ -393,7 +554,7 @@ function TraceView({
               ) : null}
             </button>
           ))}
-          {steps.length === 0 ? <div className="memory-empty">本次执行还没有步骤。</div> : null}
+          {steps.length === 0 ? <div className="memory-empty">{t('memory.noStep')}</div> : null}
         </div>
 
         <div className="memory-detail">
@@ -414,9 +575,10 @@ function TraceView({
                 setPlaying((p) => !p)
               }}
               onCardAdded={onCardAdded}
+              t={t}
             />
           ) : (
-            <div className="memory-empty">点击左侧步骤查看细节与回放。</div>
+            <div className="memory-empty">{t('memory.clickStep')}</div>
           )}
         </div>
       </div>
@@ -431,7 +593,8 @@ function StepDetail({
   playing,
   onSeek,
   onTogglePlay,
-  onCardAdded
+  onCardAdded,
+  t
 }: {
   step: TraceStep
   stepIndex: number
@@ -440,6 +603,7 @@ function StepDetail({
   onSeek: (index: number) => void
   onTogglePlay: () => void
   onCardAdded: () => Promise<void> | void
+  t: (key: string, params?: Record<string, string | number>) => string
 }): React.JSX.Element {
   const [correcting, setCorrecting] = useState(false)
 
@@ -447,7 +611,7 @@ function StepDetail({
     <div className="step-detail">
       <div className="replay-bar">
         <button className="btn btn-secondary replay-play-btn" onClick={onTogglePlay}>
-          {playing ? '⏸ 暂停' : '▶ 回放'}
+          {playing ? `⏸ ${t('memory.pause')}` : `▶ ${t('memory.replay')}`}
         </button>
         <input
           type="range"
@@ -470,25 +634,25 @@ function StepDetail({
         />
       ) : (
         <div className="step-detail-noscreen">
-          <span className={`phase-badge phase-${step.phase}`}>{PHASE_LABELS[step.phase]}</span>
-          本步无界面截图
+          <span className={`phase-badge phase-${step.phase}`}>{t(`phase.${step.phase}`)}</span>
+          {t('memory.noScreenshot')}
         </div>
       )}
 
       <div className="step-detail-fields">
         <div className="step-detail-row">
-          <span className="step-detail-label">摘要</span>
+          <span className="step-detail-label">{t('memory.summary')}</span>
           <span>{step.summary}</span>
         </div>
         {step.reasoning?.content && step.reasoning.content !== step.summary ? (
           <div className="step-detail-row">
-            <span className="step-detail-label">判断依据</span>
+            <span className="step-detail-label">{t('memory.reasoning')}</span>
             <span>{step.reasoning.content}</span>
           </div>
         ) : null}
         {step.action ? (
           <div className="step-detail-row">
-            <span className="step-detail-label">动作</span>
+            <span className="step-detail-label">{t('memory.action')}</span>
             <span>
               {step.action.kind}
               {step.action.target ? `（${step.action.target[0]}, ${step.action.target[1]}）` : ''}
@@ -498,7 +662,7 @@ function StepDetail({
         ) : null}
         {step.outcome ? (
           <div className="step-detail-row">
-            <span className="step-detail-label">结果</span>
+            <span className="step-detail-label">{t('memory.result')}</span>
             <span>
               {step.outcome.status}
               {step.outcome.latencyMs != null ? ` · ${step.outcome.latencyMs}ms` : ''}
@@ -508,8 +672,8 @@ function StepDetail({
         ) : null}
         {step.reasoning?.memoryRefs?.length ? (
           <div className="step-detail-row">
-            <span className="step-detail-label">引用经验</span>
-            <span>📎 {step.reasoning.memoryRefs.length} 条团队经验参与了本步判断</span>
+            <span className="step-detail-label">{t('memory.refExp')}</span>
+            <span>📎 {t('memory.refExpDesc', { count: step.reasoning.memoryRefs.length })}</span>
           </div>
         ) : null}
       </div>
@@ -521,10 +685,11 @@ function StepDetail({
             setCorrecting(false)
             if (saved) await onCardAdded()
           }}
+          t={t}
         />
       ) : (
         <button className="btn btn-secondary" onClick={() => setCorrecting(true)}>
-          纠正这一步 → 沉淀为经验
+          {t('memory.correct')}
         </button>
       )}
     </div>
@@ -534,10 +699,12 @@ function StepDetail({
 // 人工纠正表单：把"这一步应该怎么做"沉淀为 human_takeover 经验卡片
 function CorrectionForm({
   step,
-  onDone
+  onDone,
+  t
 }: {
   step: TraceStep
   onDone: (saved: boolean) => void
+  t: (key: string, params?: Record<string, string | number>) => string
 }): React.JSX.Element {
   const [scenario, setScenario] = useState('')
   const [guidance, setGuidance] = useState('')
@@ -546,7 +713,7 @@ function CorrectionForm({
 
   const handleSave = useCallback(async () => {
     if (!scenario.trim() || !guidance.trim()) {
-      showToast('请填写场景和正确做法', 'error')
+      showToast(t('memory.fillRequired'), 'error')
       return
     }
     setSaving(true)
@@ -559,50 +726,50 @@ function CorrectionForm({
         evidence: { sessionId: step.sessionId, stepIds: [step.stepId] }
       })) as { success: boolean; error?: string }
       if (result?.success) {
-        showToast('已沉淀为团队经验，下一轮立即生效', 'success')
+        showToast(t('memory.saved'), 'success')
         onDone(true)
       } else {
-        showToast(result?.error || '保存失败', 'error')
+        showToast(result?.error || t('memory.saveFail'), 'error')
       }
     } finally {
       setSaving(false)
     }
-  }, [guidance, onDone, rationale, scenario, step.sessionId, step.stepId])
+  }, [guidance, onDone, rationale, scenario, step.sessionId, step.stepId, t])
 
   return (
     <div className="correction-form">
-      <div className="card-title">人工纠正</div>
+      <div className="card-title">{t('memory.correction')}</div>
       <div className="form-group">
-        <label className="form-label">什么情况下（场景）</label>
+        <label className="form-label">{t('memory.scenario')}</label>
         <input
           className="form-input"
           value={scenario}
           onChange={(e) => setScenario(e.target.value)}
-          placeholder="例如：客户询问报价时"
+          placeholder={t('memory.scenarioPlaceholder')}
         />
       </div>
       <div className="form-group">
-        <label className="form-label">应该怎么做</label>
+        <label className="form-label">{t('memory.guidance')}</label>
         <textarea
           className="form-input"
           rows={3}
           value={guidance}
           onChange={(e) => setGuidance(e.target.value)}
-          placeholder="例如：先确认具体需求和数量，再给出报价区间，不要直接报最低价"
+          placeholder={t('memory.guidancePlaceholder')}
         />
       </div>
       <div className="form-group">
-        <label className="form-label">为什么（可选）</label>
+        <label className="form-label">{t('memory.why')}</label>
         <input
           className="form-input"
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
-          placeholder="例如：直接报价容易被比价，先了解需求才能匹配方案"
+          placeholder={t('memory.whyPlaceholder')}
         />
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn btn-secondary" onClick={() => onDone(false)} disabled={saving}>
-          取消
+          {t('btn.cancel')}
         </button>
         <button
           className="btn btn-primary"
@@ -610,7 +777,7 @@ function CorrectionForm({
           disabled={saving}
           style={{ flex: 1 }}
         >
-          {saving ? '保存中...' : '保存经验'}
+          {saving ? t('memory.saving') : t('memory.saveExp')}
         </button>
       </div>
     </div>
@@ -621,10 +788,12 @@ function CorrectionForm({
 
 function CardsView({
   cards,
-  onChanged
+  onChanged,
+  t
 }: {
   cards: ExperienceCard[]
   onChanged: () => Promise<void> | void
+  t: (key: string, params?: Record<string, string | number>) => string
 }): React.JSX.Element {
   const handleToggle = useCallback(
     async (card: ExperienceCard) => {
@@ -637,7 +806,7 @@ function CardsView({
   const handleDelete = useCallback(
     async (card: ExperienceCard) => {
       await window.electron?.invoke('memory:deleteCard', card.cardId)
-      showToast('经验卡片已删除', 'success')
+      showToast(t('memory.cardDeleted'), 'success')
       await onChanged()
     },
     [onChanged]
@@ -647,14 +816,14 @@ function CardsView({
     <div className="memory-cards-view">
       <div className="memory-trace-header">
         <div>
-          <h1>经验卡片</h1>
-          <p>启用中的卡片会在每轮判断前注入给智能体，被引用与成功次数自动统计。</p>
+          <h1>{t('memory.cards')}</h1>
+          <p>{t('memory.cardDesc')}</p>
         </div>
       </div>
 
       {cards.length === 0 ? (
         <div className="memory-empty memory-empty-main">
-          还没有经验。在「执行轨迹」里点「从这次轨迹学习」，或对某一步做人工纠正。
+          {t('memory.noCard')}
         </div>
       ) : (
         <div className="memory-cards-list">
@@ -662,24 +831,24 @@ function CardsView({
             <div key={card.cardId} className={`memory-card ${card.enabled ? '' : 'disabled'}`}>
               <div className="memory-card-top">
                 <span className={`source-badge source-${card.source}`}>
-                  {SOURCE_LABELS[card.source]}
+                  {t(`source.${card.source}`)}
                 </span>
                 <span className="memory-card-stats">
-                  被引用 {card.stats.used} 次 · 成功 {card.stats.success} 次
+                  {t('memory.used')} {card.stats.used} {t('memory.times')} · {t('memory.success')} {card.stats.success} {t('memory.times')}
                 </span>
                 <div className="memory-card-actions">
                   <button className="btn-text" onClick={() => handleToggle(card)}>
-                    {card.enabled ? '停用' : '启用'}
+                    {card.enabled ? t('memory.disable') : t('memory.enable')}
                   </button>
                   <button className="btn-text danger" onClick={() => handleDelete(card)}>
-                    删除
+                    {t('memory.delete')}
                   </button>
                 </div>
               </div>
               <div className="memory-card-scenario">【{card.scenario}】</div>
               <div className="memory-card-guidance">{card.guidance}</div>
               {card.rationale ? (
-                <div className="memory-card-rationale">为什么：{card.rationale}</div>
+                <div className="memory-card-rationale">{t('memory.whyLabel')}{card.rationale}</div>
               ) : null}
             </div>
           ))}
