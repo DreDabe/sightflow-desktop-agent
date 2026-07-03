@@ -421,8 +421,7 @@ function App() {
     <div className="app main-shell">
       <aside className={`main-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="main-sidebar-brand">
-          <img src={logoUrl} alt="SightFlow" className="app-logo" />
-          {!sidebarCollapsed && <span className="main-sidebar-brand-text">SightFlow</span>}
+          <img src={logoUrl} alt="AutoReply" className="app-logo" />
         </div>
         <div className="main-sidebar-modes">
           {enabledModes.map((mode) => (
@@ -912,7 +911,7 @@ function SettingsWindow(): React.JSX.Element {
     <div className="settings-shell">
       <aside className="settings-sidebar">
         <div className="settings-sidebar-brand">
-          <img src={logoUrl} alt="SightFlow" className="app-logo" />
+          <img src={logoUrl} alt="AutoReply" className="app-logo" />
           <span>设置</span>
         </div>
         <button

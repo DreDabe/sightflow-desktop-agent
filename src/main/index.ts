@@ -1,8 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain, desktopCapturer } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, desktopCapturer, nativeImage } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import iconFile from '../../resources/icon.png?asset'
 import { checkAndRequestPermissions } from './permission'
 import Store from 'electron-store'
 import { AIClient } from '../core/ai-client'
@@ -50,6 +50,8 @@ import { ModelConfig, ModelCapability, ReplyMode, SpecificObject } from '../core
 import { spawn as spawnChild, ChildProcess } from 'child_process'
 import { randomUUID } from 'crypto'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
+
+const icon = nativeImage.createFromPath(iconFile)
 
 const FIXED_ARK_MODEL = 'doubao-seed-2-0-lite-260215'
 const FIXED_ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
@@ -138,7 +140,7 @@ type ProviderHubManifest = {
 }
 
 const DEFAULT_PROVIDER_HUB_URL =
-  process.env.SIGHTFLOW_PROVIDER_HUB_URL || 'https://sightflow.dev/provider-hub.json'
+  process.env.AUTOREPLY_PROVIDER_HUB_URL || 'https://sightflow.dev/provider-hub.json'
 const PROVIDER_HUB_CACHE_KEY = 'providerHubCache'
 
 const settingsStore = new StoreClass({
@@ -210,7 +212,7 @@ function createWindow(): void {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 12 },
     backgroundColor: '#0a0b10',
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -252,7 +254,7 @@ function createSettingsWindow(): void {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
     backgroundColor: '#0a0b10',
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -298,7 +300,7 @@ function createMemoryWindow(): void {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
     backgroundColor: '#0a0b10',
-    ...(process.platform === 'linux' ? { icon } : {}),
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

@@ -1037,8 +1037,10 @@ textarea.form-input {
 }
 
 .main-sidebar-brand .app-logo {
-  width: 28px;
   height: 28px;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
 }
 
 .main-sidebar-modes {

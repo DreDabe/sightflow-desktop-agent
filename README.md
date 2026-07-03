@@ -2,285 +2,289 @@
 
 <div align="center">
 
-<h1>SightFlow Desktop Agent · 情感关怀增强版</h1>
+<h1>AutoReply · Smart Reply Assistant</h1>
 
-<p><strong>基于 SightFlow 开源项目，增加 BERT 情感分类模块，实现微信消息抑郁倾向识别与情感关怀自动回复。</strong></p>
+<p><strong>AI that understands conversation emotions and replies like a real person — see the screen, detect sentiment, reply intelligently, accumulate experience.</strong></p>
+
+<p>
+  <a href="./README.md"><b>English</b></a>
+  &nbsp;·&nbsp;
+  <a href="./README.zh-CN.md">简体中文</a>
+</p>
 
 <p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Platform-Windows-success" alt="Platform: Windows" />
-  <img src="https://img.shields.io/badge/Python-3.8%2B-blue" alt="Python 3.8+" />
+  <img src="https://img.shields.io/badge/Electron-39-blue" alt="Electron 39" />
   <img src="https://img.shields.io/badge/Model-BERT%20Base%20Chinese-yellow" alt="BERT Base Chinese" />
 </p>
 
 <p>
-  <a href="#-原项目说明"><b>原项目说明</b></a> ·
-  <a href="#-新增功能情感分类与关怀回复"><b>新增功能</b></a> ·
-  <a href="#-快速开始"><b>快速开始</b></a> ·
-  <a href="#-情感分类模块详解"><b>模块详解</b></a> ·
-  <a href="#-配置说明"><b>配置说明</b></a>
+  <a href="#-overview"><b>Overview</b></a> ·
+  <a href="#-key-features"><b>Features</b></a> ·
+  <a href="#-advantages-over-original-project"><b>Advantages</b></a> ·
+  <a href="#-quick-start"><b>Quick Start</b></a> ·
+  <a href="#-configuration"><b>Configuration</b></a> ·
+  <a href="#-architecture"><b>Architecture</b></a>
 </p>
 
 </div>
 
 ---
 
-## 📌 原项目说明
+## 📌 Overview
 
-本项目基于 [sightflow-dev/sightflow-desktop-agent](https://github.com/sightflow-dev/sightflow-desktop-agent) 进行二次开发。
+**AutoReply (Smart Reply Assistant)** is a VLM-powered desktop intelligent auto-reply system focused on instant messaging scenarios. The system automatically monitors chat windows, understands conversation content and emotional states, generates personalized replies, and accumulates reusable dialogue experience from every interaction.
 
-SightFlow 是一个开源的桌面端 AI 工作记忆引擎 (Working Memory Engine)，核心能力是 **See · Think · Do · Learn**：
-
-| 阶段 | 说明 |
-| :-- | :-- |
-| **See** | 视觉模型理解任意软件 UI 及当前状态 |
-| **Think** | Agent 结合上下文和历史进行规划决策 |
-| **Do** | 模拟人类操作：点击、输入、切换窗口、发送消息 |
-| **Learn** | 每次执行写入结构化 work-trace，积累持久工作记忆 |
-
-原项目技术栈：**Electron · electron-vite · React · TypeScript**，由视觉语言模型 (VLM) 驱动。
+Built on the [SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agent) open-source project with deep secondary development, it retains the original vision-driven automation capabilities while adding **BERT sentiment classification, multi-mode management, specific contact routing, semi-auto reply, and working memory engine** — upgrading the project from a general-purpose RPA tool to a conversation-focused intelligent reply platform.
 
 ---
 
-## ✦ 新增功能：情感分类与关怀回复
+## ✦ Key Features
 
-在原项目"识别微信信息并给出回复"流程中，插入了一个 **BERT 情感分类模块**，实现以下流程：
+### 🎯 Intelligent Conversation Reply
+
+| Capability | Description |
+| :-- | :-- |
+| **Vision-Driven** | VLM automatically identifies chat window layout and extracts message content — no API integration needed |
+| **Sentiment-Aware** | Built-in BERT sentiment classification module with 5-level depression tendency detection and automatic care strategy injection |
+| **Semi-Auto Reply** | AI recommends reply → user one-click paste/reply/skip — human-AI collaboration for safety |
+| **Full Automation** | Three-level auto-reply switches (global / mode / contact) — unattended operation supported |
+
+### 🧠 Multi-Mode Management
+
+| Capability | Description |
+| :-- | :-- |
+| **Preset Modes** | Depression prediction, romance, high EQ — built-in system modes, can be disabled but not deleted |
+| **Custom Modes** | Create modes freely with custom Prompt, sentiment analysis toggle, unified prefix |
+| **Independent Runtime** | Each mode has its own running state, log stream, and recommended reply |
+| **Parallel Execution** | Multiple modes can run simultaneously, each maintaining its own conversation detection loop |
+
+### 👤 Specific Contact Routing
+
+| Capability | Description |
+| :-- | :-- |
+| **Contact Identification** | VLM automatically extracts contact name from chat window title bar |
+| **Smart Routing** | Matched contact → route to dedicated mode; unmatched → use global default mode |
+| **Personalized Config** | Each contact can have specific title, relationship description, and independent auto-reply strategy |
+| **Prompt Injection** | Contact's title and relationship are automatically injected into the Prompt for context-aware replies |
+
+### 💛 BERT Sentiment Classification
 
 ```mermaid
 flowchart LR
-    A["微信消息截图"] --> B["VLM 文本提取"]
-    B --> C["BERT 情感分类"]
-    C --> D["分类结果<br/>5 级抑郁倾向"]
-    D --> E["结合对话上下文<br/>生成关怀回复"]
+    A["Chat Screenshot"] --> B["VLM Text Extraction"]
+    B --> C["BERT Sentiment Classification"]
+    C --> D["5-Level Depression Tendency"]
+    D --> E["Context-Aware<br/>Care Reply Generation"]
 ```
 
-### 处理流程
-
-| 步骤 | 模块 | 输入 | 输出 |
-| :-- | :-- | :-- | :-- |
-| 1 | VLM 视觉识别 | 聊天窗口截图 | 对方最新消息文本 |
-| 2 | BERT 情感分类 | 文本字符串 | 分类等级（5 级）+ 置信度 |
-| 3 | Prompt 拼接 | 分类结果 + 对话上下文 | 增强后的 system prompt |
-| 4 | LLM 回复生成 | 增强后的 prompt | 包含情感关怀的回复文本 |
-
-### 分类等级与关怀策略
-
-| 等级 | 类别 | 关怀策略 |
+| Level | Category | Care Strategy |
 | :-- | :-- | :-- |
-| 0 | 无抑郁 | 正常对话回复 |
-| 1 | 轻度抑郁 | 温和关怀，鼓励表达 |
-| 2 | 中度抑郁 | 主动倾听，提供情感支持 |
-| 3 | 重度抑郁 | 深度共情，建议寻求专业帮助 |
-| 4 | 极重度抑郁 | 强烈建议就医，提供心理热线信息 |
+| 0 | No depression | Normal conversation reply |
+| 1 | Mild depression | Gentle care, encourage expression |
+| 2 | Moderate depression | Active listening, emotional support |
+| 3 | Severe depression | Deep empathy, suggest professional help |
+| 4 | Extreme depression | Strongly recommend medical attention, provide hotline info |
+
+### 📚 Working Memory Engine
+
+AutoReply's most differentiated capability — letting AI **learn and accumulate experience** from every conversation:
+
+| Layer | Capability | Description |
+| :-- | :-- | :-- |
+| **L1 Record** | Structured Traces | Each step records: timestamp / UI state / rationale / action / result |
+| **L2 Replay** | Trace Playback | Timeline card flow + step-by-step replay + screenshot highlighting for decision review |
+| **L3 Inherit** | Experience Accumulation | Traces auto-inducted into experience cards, injected into Prompt at runtime, with quantifiable effectiveness stats |
+
+> Others record **operation steps**; we record **"why this decision was made"**. The key difference from RPA to Agent Runtime.
+
+### 🖥️ Multi-Provider Model Support
+
+| Provider | Default Model | Capabilities |
+| :-- | :-- | :-- |
+| Volcengine Ark | doubao-seed-2-0-lite-260215 | Text + Vision |
+| DashScope (Alibaba Cloud) | qwen-vl-plus | Text + Vision |
+| OpenAI | gpt-4o | Text + Vision |
+| DeepSeek | deepseek-chat | Text |
+| Custom | - | Text |
+
+- **Vision model** and **reply model** configured separately for flexible combination
+- Model capability tags (text/vision/audio) with connection testing
+- Non-vision reply models automatically enable text extraction mode
+
+### 📱 Multi-Platform IM Support
+
+| Application | Detection Method |
+| :-- | :-- |
+| WeChat / WeCom | VLM automatic window layout detection |
+| DingTalk / Lark / Slack / Telegram | Manual region selection |
+| Other desktop apps | Manual region selection |
 
 ---
 
-## 🚀 快速开始
+## ✦ Advantages Over Original Project
 
-### 前置条件
+| Dimension | SightFlow (Original) | AutoReply (This Project) |
+| :-- | :-- | :-- |
+| **Positioning** | General desktop RPA tool | Conversation-focused intelligent reply platform |
+| **Sentiment Understanding** | None | ✅ BERT 5-level sentiment classification + automatic care strategies |
+| **Reply Modes** | Single global mode | ✅ Multi-mode management + custom Prompt + independent runtime |
+| **Contact Recognition** | None | ✅ VLM contact identification + specific contact routing + personalized config |
+| **Reply Method** | Full-auto only | ✅ Semi-auto (recommend/paste/reply/skip) + full-auto, three-level auto-reply priority |
+| **Experience Accumulation** | Work trace recording | ✅ Trace recording + playback + experience accumulation + runtime injection + quantifiable effectiveness |
+| **Model Configuration** | Fixed Volcengine Ark | ✅ Multi-provider support + vision/reply model separation + capability tags |
+| **Standby Management** | None | ✅ Progressive backoff standby + semantic confirmation exit + status visualization |
+| **Model Training** | None | ✅ Built-in training UI + Kaggle dataset + real-time progress streaming |
+| **Human Correction** | None | ✅ Trace step correction → accumulated as experience cards |
 
-- **Node.js** (LTS 版本)
-- **Python 3.8+**（情感分类模块需要）
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Node.js** (LTS version)
+- **Python 3.8+** (required for sentiment classification module)
 - **npm**
 
-### 1. 安装依赖
+### 1. Install Dependencies
 
 ```bash
-# 克隆项目
-git clone https://github.com/DreDabe/sightflow-desktop-agent.git
-cd sightflow-desktop-agent
+git clone https://github.com/your-org/autoreply-desktop-agent.git
+cd autoreply-desktop-agent
 
-# 安装 Node.js 依赖
 npm install
 ```
 
-### 2. Python 依赖
+### 2. Python Dependencies
 
-首次运行时，程序会 **自动检测并安装** Python 依赖（`torch`, `transformers`, `pandas`, `scikit-learn`, `kagglehub`, `tqdm`, `numpy`）。
+On first run, the program will **automatically detect and install** Python dependencies (`torch`, `transformers`, `pandas`, `scikit-learn`, `kagglehub`, `tqdm`, `numpy`).
 
-如需手动安装：
+For manual installation:
 
 ```bash
 pip install -r sentpredict/requirements.txt
 ```
 
-> 国内用户建议配置 HuggingFace 镜像：程序已内置 `HF_ENDPOINT=https://hf-mirror.com`。
+> For users in China, HuggingFace mirror is recommended: the program has built-in `HF_ENDPOINT=https://hf-mirror.com`.
 
-### 3. 运行开发模式
+### 3. Run in Development Mode
 
 ```bash
 npm run dev
 ```
 
-### 4. 构建发布
+### 4. Build for Production
 
 ```bash
 npm run build:win     # Windows
+npm run build:mac     # macOS
+npm run build:linux   # Linux
 ```
 
 ---
 
-## 🔬 情感分类模块详解
+## ⚙️ Configuration
 
-### 目录结构
+### Basic Setup
 
-```
-sentpredict/
-├── BertModel.py          # BERT 分类模型网络结构
-├── classify_server.py    # 推理服务（常驻 Python 子进程）
-├── train_server.py       # 训练脚本（由设置界面调用）
-├── train.py              # 原始训练脚本（含测试与曲线绘制）
-├── predict.py            # 原始预测脚本
-├── requirements.txt      # Python 依赖列表
-└── models/               # 模型权重目录（已加入 .gitignore）
-    └── best.pt           # 训练后的最优权重（需自行训练）
-```
+1. Go to [Volcengine Console → Ark](https://console.volcengine.com/ark), enable the service and generate an API Key
+2. Launch the app and click the settings button at the bottom of the sidebar
+3. In **Basic Configuration**, select global vision model and global reply model
+4. In **Agent**, select the active Provider — built-in default is **Doubao Seed**
 
-### 模型架构
+### Model Configuration
 
-基于 **bert-base-chinese** 的文本分类模型：
+Manage AI models from different providers in the **Model Configuration** section of settings:
 
-```python
-BertClassifier(
-    bert: BertModel          # bert-base-chinese 预训练权重
-    dropout: Dropout(0.5)    # 防过拟合
-    linear: Linear(768, 5)   # 5 分类输出
-)
-```
+- Click **+ Add Model** to select a provider and enter API Key
+- Connection testing supported to verify configuration
+- Model capabilities auto-tagged — vision models for layout detection, text models for reply generation
 
-- **输入**：中文文本（max_length=350）
-- **输出**：5 维 logits → softmax → 分类概率
+### Sentiment Model Training
 
-### 推理服务 (classify_server.py)
+Operate in the **Model Training** section of settings:
 
-以 **常驻子进程** 方式运行，通过 stdin/stdout JSON 通信：
+1. Click **Start Training** — automatically downloads dataset and starts training
+2. Training logs display in real-time in the log view below
+3. After training, the model is automatically saved as `sentpredict/models/best.pt`
 
-```
-Node.js ──JSON──▶ Python (classify_server.py)
-Node.js ◀──JSON── Python
-```
+> ⚠️ Training takes a long time (hours). First-time training requires downloading BERT pre-trained weights and dataset.
 
-- 启动时加载模型，输出 `{"status": "ready"}`
-- 接收 `{"text": "..."}`，返回 `{"classIndex": 0, "className": "无抑郁", "probabilities": [...]}`
-- 接收 `"exit"` 关闭进程
+### Target App & Region Selection
 
-### 训练服务 (train_server.py)
-
-从设置界面触发，以子进程方式运行：
-
-- **数据集**：Kaggle 中文抑郁数据集 (`kyharndeok/dpreesion`)，自动下载
-- **训练参数**：epoch=7, batch_size=32, lr=1e-5, early_stopping_patience=3
-- **输出**：每轮训练进度通过 JSON 事件实时推送到 UI
-- **保存**：验证集最优模型保存为 `models/best.pt`
-
-### Node.js 封装 (classifier.ts)
-
-`SentimentClassifier` 类管理 Python 子进程的完整生命周期：
-
-- `start(scriptDir)` — 启动子进程，自动安装依赖，等待模型加载就绪
-- `classify(text)` — 发送文本进行分类，10 秒超时保护
-- `stop()` — 优雅关闭子进程
-
-`ensurePythonDeps(scriptDir)` — 检测 Python 依赖是否完整，缺失时自动执行 `pip install -r requirements.txt`。
+- **WeChat / WeCom**: VLM automatic window region detection by default
+- **DingTalk, Lark, Slack, Telegram, etc.**: Manual selection of three regions (contact list, chat content area, input box)
 
 ---
 
-## ⚙️ 配置说明
-
-### 基础配置
-
-与原项目一致，需要配置火山方舟 (Volcengine Ark) API Key：
-
-1. 打开 [火山引擎控制台 → 方舟](https://console.volcengine.com/ark)，启用服务并生成 API Key
-2. 启动应用后点击右下角设置按钮
-3. 在 **基础配置** 中填入 API Key，默认 Base URL `https://ark.cn-beijing.volces.com/api/v3` 通常无需修改
-4. 在 **智能体** 中选择启用的 Provider，内置默认为 **豆包 Seed**
-
-### 情感模型训练
-
-在设置界面的 **情感模型训练** 卡片中操作：
-
-1. 点击 **开始训练** — 自动下载数据集并启动训练
-2. 训练日志实时显示在下方日志视图中（带时间戳和 TRAIN 标识）
-3. 训练完成后模型自动保存为 `sentpredict/models/best.pt`
-4. 训练过程中可点击 **停止训练** 中断
-
-> ⚠️ 训练过程耗时较长（数小时），请耐心等待。首次训练需下载 BERT 预训练权重和数据集。
-
-### 目标应用与框选
-
-- **微信** / **企业微信**：默认使用 VLM 自动检测窗口区域
-- **钉钉、飞书、Slack、Telegram** 等：需手动框选三个区域（会话列表、聊天内容区、输入框）
-
----
-
-## 🏗️ 项目架构
+## 🏗️ Architecture
 
 ```
 src/
 ├── main/
-│   └── index.ts              # 主进程：窗口管理、IPC、训练进程管理
+│   ├── index.ts              # Main process: window management, IPC, engine orchestration
+│   ├── overlay-window.ts     # Box-select wizard window
+│   ├── provider-bundle.ts    # Provider installation and loading
+│   └── skill-server.ts       # Local HTTP API
 ├── core/
-│   └── sentiment/
-│       ├── classifier.ts     # 情感分类器封装（Python 子进程管理）
-│       └── types.ts          # 类型定义
+│   ├── ai-client.ts          # Unified AI call wrapper
+│   ├── device.ts             # Device interface
+│   ├── rpa-device.ts         # VLM layout detection + RPA operations
+│   ├── box-select-device.ts  # Manual box-select mode
+│   ├── runtime-host.ts       # Event queue + trace + memory
+│   ├── generic-channel-session.ts  # State machine + mode routing
+│   ├── sentiment/
+│   │   └── classifier.ts     # BERT sentiment classifier (Python subprocess)
+│   ├── memory/
+│   │   ├── experience-store.ts  # Experience card storage
+│   │   └── learn-from-session.ts  # Trace → experience induction
+│   ├── trace/
+│   │   └── trace-recorder.ts # Structured work traces
+│   ├── rpa/
+│   │   ├── vision-utils.ts   # VLM vision detection
+│   │   ├── image-compare.ts  # Pixel diff detection
+│   │   ├── has-unread.ts     # Unread badge detection
+│   │   ├── input-utils.ts    # RPA input operations
+│   │   └── screenshot-utils.ts  # Screenshot utilities
+│   └── types.ts              # Global type definitions
 ├── preload/
-│   └── index.ts              # 预加载脚本（IPC Bridge）
+│   └── index.ts              # Preload script (IPC Bridge)
 └── renderer/
     └── src/
-        ├── App.tsx           # 渲染进程：主界面 + 设置界面
-        └── index.css         # 全局样式
+        ├── App.tsx           # Main UI + Settings + Mode management
+        ├── MemoryWindow.tsx  # Working memory window
+        ├── i18n.ts           # Internationalization
+        └── index.css         # Global styles
 ```
 
-### IPC 通信
+---
 
-| 通道 | 方向 | 说明 |
-| :-- | :-- | :-- |
-| `train:start` | Renderer → Main | 启动训练 |
-| `train:stop` | Renderer → Main | 停止训练 |
-| `train:status` | Renderer → Main | 查询训练状态 |
-| `train:event` | Main → Renderer | 训练事件推送（进度、完成、错误） |
-| `engine:start` | Renderer → Main | 启动引擎 |
-| `engine:log` | Main → Renderer | 运行日志推送 |
+## 🔐 Security & Data
+
+- Work traces and experience cards are **stored locally by default** — never uploaded to any server
+- Sentiment classification runs in a local Python subprocess — text data never leaves your machine
+- API Keys stored locally via electron-store with encryption
+- Skill HTTP Server only listens on `127.0.0.1:12680`
+- **Your work data always belongs to you**
 
 ---
 
-## 📦 模型权重
+## 🤝 Acknowledgements
 
-训练产生的模型权重文件（`*.pt`, `*.pth`, `*.onnx`）体积较大，已通过 `.gitignore` 排除：
+This project is built on the following open-source project:
 
-```gitignore
-sentpredict/models/*.pt
-sentpredict/models/*.pth
-sentpredict/models/*.onnx
-```
-
-如需使用预训练权重，请自行训练或从其他途径获取，放置于 `sentpredict/models/best.pt`。
+- **[SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agent)** — Open-source desktop AI working memory engine, Apache License 2.0
 
 ---
 
-## 🔐 安全与数据
-
-- 工作记忆 (Work Trace) 默认 **本地存储**，不上传任何服务器
-- 情感分类在本地 Python 子进程中执行，文本数据不离开本机
-- 开源代码 ≠ 开放数据：**你的工作数据始终属于你**
-
----
-
-## 🤝 致谢
-
-本项目基于以下开源项目进行二次开发：
-
-- **[SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agent)** — 开源桌面端 AI 工作记忆引擎，Apache License 2.0
-
----
-
-## 📄 许可证
+## 📄 License
 
 Released under the [Apache License 2.0](LICENSE).
 
 ---
 
-<div align="center"><sub>© 2026 Based on SightFlow. Released under the Apache License 2.0.</sub></div>
+<div align="center"><sub>© 2026 AutoReply. Based on SightFlow. Released under the Apache License 2.0.</sub></div>
 
 <p align="right"><a href="#readme-top">↑ Back to top</a></p>

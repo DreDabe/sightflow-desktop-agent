@@ -214,7 +214,7 @@ export default function MemoryWindow(): React.JSX.Element {
     <div className="memory-shell">
       <aside className="memory-sidebar">
         <div className="settings-sidebar-brand">
-          <img src={logoUrl} alt="SightFlow" className="app-logo" />
+          <img src={logoUrl} alt="AutoReply" className="app-logo" />
           <span>工作记忆</span>
         </div>
 

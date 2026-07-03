@@ -74,7 +74,7 @@ function modifyPthFile(pythonDir) {
 }
 
 async function main() {
-  console.log('=== SightFlow 嵌入式 Python 环境设置 ===\n')
+  console.log('=== AutoReply 嵌入式 Python 环境设置 ===\n')
 
   if (existsSync(join(PYTHON_DIR, 'python.exe'))) {
     console.log('嵌入式 Python 已存在，跳过下载。')

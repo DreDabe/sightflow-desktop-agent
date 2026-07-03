@@ -6,7 +6,7 @@ export type Locale = 'zh' | 'en'
 const translations = {
   zh: {
     // Header
-    'app.title': 'SightFlow Desktop',
+    'app.title': 'AutoReply - 智能回复助手',
     'app.version': 'v0.1.0',
 
     // Tabs
@@ -67,7 +67,7 @@ const translations = {
     'toast.startFailed': '启动失败',
   },
   en: {
-    'app.title': 'SightFlow Desktop',
+    'app.title': 'AutoReply - Smart Reply Assistant',
     'app.version': 'v0.1.0',
 
     'tab.control': 'Control',

@@ -1,5 +1,5 @@
-appId: com.sightflow.desktop
-productName: SightFlow
+appId: com.autoreply.desktop
+productName: AutoReply - 智能回复助手
 directories:
   buildResources: build
 files:
@@ -18,7 +18,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: SightFlow
+  executableName: AutoReply
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
