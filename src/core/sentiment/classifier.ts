@@ -7,6 +7,7 @@ const CLASS_NAMES = ['无抑郁', '轻度抑郁', '中度抑郁', '重度抑郁'
 
 const DEPS_MARKER_FILE = '.deps-installed'
 const SCRIPTS_MARKER_FILE = '.scripts-copied'
+const REQUIRED_PACKAGES = ['torch', 'torchvision', 'transformers', 'pandas', 'sklearn', 'kagglehub', 'tqdm', 'numpy']
 
 export interface PythonCheckResult {
   installed: boolean
@@ -140,7 +141,11 @@ function getScriptsDir(userDataPath: string): string {
 }
 
 function isDepsInstalled(libsDir: string): boolean {
-  return existsSync(join(libsDir, DEPS_MARKER_FILE))
+  if (!existsSync(join(libsDir, DEPS_MARKER_FILE))) return false
+  for (const pkg of REQUIRED_PACKAGES) {
+    if (!existsSync(join(libsDir, pkg))) return false
+  }
+  return true
 }
 
 function markDepsInstalled(libsDir: string): void {
@@ -207,7 +212,7 @@ export async function ensurePythonDeps(_scriptDir: string, userDataPath?: string
   const env = buildSpawnEnv(libsDir ? { PYTHONPATH: libsDir } : {})
 
   try {
-    execSync(`"${pythonPath}" -c "import torch; import transformers; import pandas; import sklearn; import kagglehub; import tqdm; import numpy"`, {
+    execSync(`"${pythonPath}" -c "import torch; import torchvision; import transformers; import pandas; import sklearn; import kagglehub; import tqdm; import numpy"`, {
       stdio: 'pipe',
       timeout: 10000,
       env
@@ -223,8 +228,8 @@ export async function ensurePythonDeps(_scriptDir: string, userDataPath?: string
       const pipPath = pythonPath.replace(/python\.exe$/i, 'Scripts\\pip.exe')
       const hasPip = existsSync(pipPath)
       const installCmd = hasPip
-        ? `"${pipPath}" install ${installTarget} torch transformers pandas scikit-learn kagglehub tqdm numpy`
-        : `"${pythonPath}" -m pip install ${installTarget} torch transformers pandas scikit-learn kagglehub tqdm numpy`
+        ? `"${pipPath}" install ${installTarget} torch torchvision transformers pandas scikit-learn kagglehub tqdm numpy`
+        : `"${pythonPath}" -m pip install ${installTarget} torch torchvision transformers pandas scikit-learn kagglehub tqdm numpy`
 
       execSync(installCmd, {
         stdio: 'pipe',

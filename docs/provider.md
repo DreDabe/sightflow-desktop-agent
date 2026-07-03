@@ -2,7 +2,7 @@
 
 <p align="right"><b>中文</b> · <a href="./provider.en.md">English</a></p>
 
-SightFlow 桌面端把“截图分析并生成回复”的聊天能力抽象为 Provider。外部技术使用者只需要提供一份 `manifest.json` 和一个 bundle 入口文件，应用会负责下载安装、读取配置、传入聊天截图，并消费 Provider 返回的事件。
+AutoReply 桌面端把"截图分析并生成回复"的聊天能力抽象为 Provider。外部技术使用者只需要提供一份 `manifest.json` 和一个 bundle 入口文件，应用会负责下载安装、读取配置、传入聊天截图，并消费 Provider 返回的事件。
 
 ## Provider 必须提供的结构
 
@@ -170,7 +170,7 @@ POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
 本地开发时，可以在设置页填写类似下面的地址安装内置示例：
 
 ```text
-file:///path/to/sightflow-dev-desktop/resources/providers/volcengine-ark/manifest.json
+file:///path/to/autoreply-desktop/resources/providers/volcengine-ark/manifest.json
 ```
 
 其他开发者需要把路径替换成自己机器上的仓库绝对路径，或者把 `manifest.json` 和 bundle 发布到可访问的 HTTPS 地址。

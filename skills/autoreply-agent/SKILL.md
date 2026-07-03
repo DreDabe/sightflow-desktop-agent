@@ -1,19 +1,19 @@
 ---
-name: sightflow_agent
+name: autoreply_agent
 description: >
-  控制 SightFlow 桌面智能体的启动、暂停和状态查询。
-  当用户需要启动 / 暂停 SightFlow 消息自动回复智能体，或查询其运行状态时使用此 skill。
+  控制 AutoReply 智能回复助手的启动、暂停和状态查询。
+  当用户需要启动 / 暂停 AutoReply 消息自动回复智能体，或查询其运行状态时使用此 skill。
   智能体应用需要提前启动并保持运行。
-metadata: {"openclaw":{"emoji":"👁️","requires":{"os":["macos","windows"]}}}
+metadata: {"openclaw":{"emoji":"🤖","requires":{"os":["macos","windows"]}}}
 ---
 
-# SightFlow Agent 控制 Skill
+# AutoReply Agent 控制 Skill
 
-本 skill 通过本地 HTTP API 控制 SightFlow 桌面智能体。API 仅监听 `127.0.0.1:12680`。
+本 skill 通过本地 HTTP API 控制 AutoReply 智能回复助手。API 仅监听 `127.0.0.1:12680`。
 
 ## 前置条件
 
-- SightFlow 桌面客户端必须已经启动并运行
+- AutoReply 桌面客户端必须已经启动并运行
 - 已在「设置」中填写视觉接口密钥 (Vision API Key)
 - 已安装并配置好聊天 Provider（如火山方舟）
 

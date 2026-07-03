@@ -2,7 +2,7 @@
 
 <p align="right"><a href="./provider.md">中文</a> · <b>English</b></p>
 
-The SightFlow desktop client abstracts the "analyze a screenshot and generate a reply" chat capability into a Provider. As an external integrator you only need to supply a `manifest.json` and a bundle entry file; the app takes care of downloading and installing it, reading its config, passing in the chat screenshot, and consuming the events the Provider returns.
+The AutoReply desktop client abstracts the "analyze a screenshot and generate a reply" chat capability into a Provider. As an external integrator you only need to supply a `manifest.json` and a bundle entry file; the app takes care of downloading and installing it, reading its config, passing in the chat screenshot, and consuming the events the Provider returns.
 
 ## Required structure of a Provider
 
@@ -170,7 +170,7 @@ POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
 During local development you can install the bundled example by entering an address like the following on the settings page:
 
 ```text
-file:///path/to/sightflow-dev-desktop/resources/providers/volcengine-ark/manifest.json
+file:///path/to/autoreply-desktop/resources/providers/volcengine-ark/manifest.json
 ```
 
 Other developers should replace the path with the absolute path of the repository on their own machine, or publish `manifest.json` and the bundle to a reachable HTTPS address.

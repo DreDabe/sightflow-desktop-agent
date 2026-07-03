@@ -469,7 +469,7 @@ async function fetchProviderHub(url = DEFAULT_PROVIDER_HUB_URL): Promise<Provide
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.autoreply.desktop')
 
   // 预先创建情感分析模型目录
   const modelDir = sentimentModelDir()
@@ -1496,7 +1496,8 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
         }
       } catch (error: any) {
         console.error('[Main] 文本提取/情感分析模块启动失败:', error?.message || error)
-        modeLog('thinking', '文本提取模块启动失败，将跳过文本提取')
+        console.error('[Main] 完整错误堆栈:', error?.stack || '无堆栈信息')
+        modeLog('thinking', `文本提取/情感分析模块启动失败: ${error?.message || error}`)
         sentimentClassifier = null
       }
     } else {
