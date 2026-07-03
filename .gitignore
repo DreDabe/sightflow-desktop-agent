@@ -48,6 +48,8 @@ resources/python/
 docs/plan/
 docs/requirements/
 docs/bug_report.md
+docs/change_build_version.md
+docs/release_description.md
 
 # Local test scripts
 src/core/rpa/tests/
