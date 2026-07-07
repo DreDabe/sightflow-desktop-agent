@@ -1165,6 +1165,11 @@ textarea.form-input {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(10, 11, 16, 0.5);
+  padding: 8px 0;
 }
 
 .mode-header-left {
@@ -1366,6 +1371,25 @@ textarea.form-input {
   resize: vertical;
   font-family: var(--font-sans);
   line-height: 1.5;
+}
+
+/* ─── User Input ─── */
+.user-input-textarea {
+  min-height: 48px;
+  resize: vertical;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+.user-input-clear-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.user-input-clear-btn:hover:not(:disabled) {
+  opacity: 1;
 }
 
 select option {

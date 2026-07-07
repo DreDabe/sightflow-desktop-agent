@@ -25,20 +25,54 @@ export function buildMemorySection(memoryCards?: MemoryCardBrief[]): string {
   return `\n\n## 团队经验（来自工作记忆，优先遵循）\n${lines.join('\n')}`
 }
 
+export interface ContextSectionOptions {
+  objectRelation?: string
+  objectTitle?: string
+  userInput?: string
+}
+
+export function buildContextSection(options: ContextSectionOptions): string {
+  const parts: string[] = []
+  if (options.objectRelation?.trim()) {
+    parts.push(`## 对话双方关系（必须遵守）
+对话双方关系：${options.objectRelation.trim()}
+规则：回复中必须体现双方"${options.objectRelation.trim()}"的关系特征，站在己方角度给出回复，语气和措辞需符合该关系。`)
+  }
+  if (options.objectTitle?.trim()) {
+    parts.push(`## 对对方标准称呼（必须遵守）
+对对方标准称呼：${options.objectTitle.trim()}
+规则：回复中必须使用"${options.objectTitle.trim()}"统一称呼对方，不可替换为其他称呼、不可省略。`)
+  }
+  if (options.userInput?.trim()) {
+    parts.push(`## 我方基础原始回复（最高优先级，必须遵守）
+我方基础原始回复内容：${options.userInput.trim()}
+规则：
+1. 必须以上述"我方基础原始回复内容"为核心文本进行修饰和完善，不可偏离其原意；
+2. 仅在基础文本上做语气、措辞的风格修饰（由回复模式专属规则决定），禁止自行发挥或另起回复；
+3. 基础文本的核心语义和信息不可删减、替换或改写，只能润色表达方式。`)
+  }
+  if (parts.length === 0) return ''
+  return '\n\n' + parts.join('\n\n')
+}
+
 const DEFAULT_MODEL = 'doubao-seed-2-0-lite-260215'
 const DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
-const REPLY_SYSTEM_PROMPT = `你是一个微信自动回复助手。你会收到一张微信/企业微信的聊天窗口截图。
+const REPLY_SYSTEM_PROMPT = `你是一个微信/企业微信自动回复助手，输入为聊天窗口截图识别后的对话文本内容。
 
-## 你的任务
-分析截图中的聊天内容，生成合适的回复。
+## 核心任务
+识别对话最新消息发送方、消息类型，结合配套回复模式规则生成符合场景的真人回复文本。
 
-## 规则
-1. 只输出回复文字，不要解释、不要添加多余内容
-2. **防自我循环**：仔细观察截图。聊天窗口中，右侧的气泡是"我"发送的。如果最后一条消息是右侧气泡（即"我"自己发送的），必须输出 [SKIP]
-3. 如果最新消息是系统消息、群公告、红包、转账等非对话消息，输出 [SKIP]
-4. 如果无法判断是否需要回复，输出 [SKIP]
-5. 回复要自然、口语化，像真人对话`
+## 强制执行规则（优先级最高，所有回复模式必须遵守，不可覆盖）
+1. 输出格式：只输出最终回复文字本身。禁止输出以下任何内容：分析过程、推理过程、解释说明、消息摘要、标签前缀（如【xxx回复】）、分段标注。正确示例："好的，明天见"；错误示例："收到对方消息，可以这样回复：好的，明天见"或"【高情商回复】好的，明天见"；
+2. 防循环机制：区分消息归属，右侧气泡为我方发送内容。若对话最后一条消息为我方发出，直接输出固定标识 [SKIP]；
+3. 无效消息拦截：最新消息为系统通知、群公告、红包、转账、撤回、文件自动提醒等非人工对话消息，直接输出 [SKIP]；
+4. 模糊判定兜底：无法确认是否需要回复、对话上下文缺失、识别内容残缺时，统一输出 [SKIP]；
+5. 话术基础要求：回复贴合日常微信口语，自然真实，避免生硬书面公文感；
+6. 基础回复优先：当系统提示词中存在"我方基础原始回复"时，无论聊天内容为何，必须基于该基础回复输出修饰后的文本，禁止输出 [SKIP]。
+
+## 补充说明
+本系统会追加独立【回复模式专属规则】模块，所有回复生成逻辑以该模块规则为风格约束，本基础规则仅做底层拦截与输出限制。`
 
 export class AIClient {
   private config: AIClientConfig
@@ -65,13 +99,17 @@ export class AIClient {
     return this.config.systemPrompt
   }
 
-  async getReplyWithPrompt(systemPrompt: string, screenshotBase64: string, extractedText?: string): Promise<string | null> {
+  async getReplyWithPrompt(systemPrompt: string, screenshotBase64: string, extractedText?: string, userInput?: string): Promise<string | null> {
     const startTime = Date.now()
     try {
       console.log('[AIClient] getReply 开始...')
-      const userPrompt = extractedText
+      let userPrompt = ''
+      if (userInput?.trim()) {
+        userPrompt = `【最高优先级指令】下方已提供"我方基础原始回复"，你必须直接输出该内容的修饰版本作为最终回复。禁止忽略、禁止自行生成其他回复内容。如果聊天内容与基础回复无关，仍以基础回复为准。\n\n我方基础原始回复：${userInput.trim()}\n\n---\n\n`
+      }
+      userPrompt += (extractedText
         ? `请根据以下聊天内容进行回复：\n${extractedText}`
-        : '请根据截图中微信聊天窗口的最新消息进行回复。'
+        : '请根据截图中微信聊天窗口的最新消息进行回复。')
       const replyText = await this.callVision(
         systemPrompt,
         userPrompt,
@@ -93,13 +131,18 @@ export class AIClient {
     }
   }
 
-  async getTextReply(systemPrompt: string, extractedText: string): Promise<string | null> {
+  async getTextReply(systemPrompt: string, extractedText: string, userInput?: string): Promise<string | null> {
     const startTime = Date.now()
     try {
       console.log('[AIClient] getTextReply 开始...')
+      let userPrompt = ''
+      if (userInput?.trim()) {
+        userPrompt = `【最高优先级指令】下方已提供"我方基础原始回复"，你必须直接输出该内容的修饰版本作为最终回复。禁止忽略、禁止自行生成其他回复内容。如果聊天内容与基础回复无关，仍以基础回复为准。\n\n我方基础原始回复：${userInput.trim()}\n\n---\n\n`
+      }
+      userPrompt += `请根据以下聊天内容进行回复：\n${extractedText}`
       const replyText = await this.callTextInternal(
         systemPrompt,
-        `请根据以下聊天内容进行回复：\n${extractedText}`
+        userPrompt
       )
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
@@ -274,6 +317,26 @@ export class AIClient {
       `[AIClient] callAPI 开始 | model=${this.config.model} | payload=${bodySizeKB}KB | timeout=${TIMEOUT_MS / 1000}s`
     )
 
+    console.log('========== [DEBUG] 最终发送给模型的提示词 ==========')
+    for (const msg of messages) {
+      const role = msg.role
+      const content = msg.content
+      if (typeof content === 'string') {
+        console.log(`--- [${role}] (text, ${content.length} chars) ---`)
+        console.log(content)
+      } else if (Array.isArray(content)) {
+        for (const part of content) {
+          if (part.type === 'text') {
+            console.log(`--- [${role}] (text, ${part.text.length} chars) ---`)
+            console.log(part.text)
+          } else if (part.type === 'image_url') {
+            console.log(`--- [${role}] (image_url, ${part.image_url?.url?.length ?? 0} chars) ---`)
+          }
+        }
+      }
+    }
+    console.log('========== [DEBUG] 提示词结束 ==========')
+
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
@@ -321,10 +384,23 @@ export class AIClient {
   private extractText(responseData: any): string {
     const content = responseData?.choices?.[0]?.message?.content
     if (typeof content === 'string' && content.length > 0) {
-      return content
+      return this.stripReasoningTags(content)
     }
     console.warn('[AIClient] 无法解析回复格式:', JSON.stringify(responseData).slice(0, 500))
     return ''
+  }
+
+  private stripReasoningTags(text: string): string {
+    let result = text
+    result = result.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    result = result.replace(/<reflection>[\s\S]*?<\/reflection>/gi, '')
+    result = result.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    const thinkBlockRegex = /^[\s\S]*?<\/think>\s*/
+    if (thinkBlockRegex.test(result)) {
+      result = result.replace(thinkBlockRegex, '')
+    }
+    result = result.trim()
+    return result
   }
 
   private stripBase64Prefix(base64: string): string {

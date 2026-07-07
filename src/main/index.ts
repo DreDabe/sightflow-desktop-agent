@@ -175,6 +175,7 @@ let settingsWindow: BrowserWindow | null = null
 let memoryWindow: BrowserWindow | null = null
 let sentimentClassifier: SentimentClassifier | null = null
 let trainingProcess: ChildProcess | null = null
+const modeUserInputCache = new Map<string, string>()
 
 // ── 工作记忆（work-trace + 经验卡片）单例，首次使用时初始化 ──
 let traceRecorderInstance: TraceRecorder | null = null
@@ -549,6 +550,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('engine:exitStandby', async (_event, modeId: string) => {
     if (typeof modeId !== 'string' || !modeId) return { success: false }
     systemSession?.forceExitStandby(modeId)
+    return { success: true }
+  })
+
+  ipcMain.handle('engine:setUserInput', async (_event, modeId: string, userInput: string) => {
+    if (typeof modeId !== 'string' || !modeId) return { success: false }
+    const value = userInput || ''
+    modeUserInputCache.set(modeId, value)
+    systemSession?.updateModeUserInput(modeId, value)
     return { success: true }
   })
 
@@ -1424,6 +1433,9 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
       sentimentEnabled: targetMode.sentimentEnabled,
       unifiedPrefix: targetMode.unifiedPrefix,
       replyModelHasVision: (replyModel.capabilities || []).includes('vision'),
+      userInput: modeUserInputCache.get(effectiveModeId) || '',
+      objectRelation: '',
+      objectTitle: '',
       onRecommendReply: (text: string) => {
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
@@ -1450,6 +1462,7 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
 
     if (systemSession && systemRuntime && systemRuntime.isRunning()) {
       systemSession.registerModeHandler(modeHandler)
+      systemSession.forceExitStandby(effectiveModeId)
       runtimeInstances.set(effectiveModeId, systemRuntime)
       notifyModeRunningChanged(effectiveModeId, true)
       return { ok: true }
@@ -1589,7 +1602,9 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
               prompt: mode.prompt,
               autoReply: obj.autoReply !== null ? obj.autoReply : mode.autoReply,
               sentimentEnabled: mode.sentimentEnabled,
-              unifiedPrefix: mode.unifiedPrefix
+              unifiedPrefix: mode.unifiedPrefix,
+              objectRelation: obj.relationship || '',
+              objectTitle: obj.title || ''
             }
           }
         }
@@ -1601,7 +1616,9 @@ async function startEngineCore(rawConfig?: any, modeId?: string): Promise<SkillS
             prompt: defaultMode.prompt,
             autoReply: defaultMode.autoReply,
             sentimentEnabled: defaultMode.sentimentEnabled,
-            unifiedPrefix: defaultMode.unifiedPrefix
+            unifiedPrefix: defaultMode.unifiedPrefix,
+            objectRelation: '',
+            objectTitle: ''
           }
         }
         return null

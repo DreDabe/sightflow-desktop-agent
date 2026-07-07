@@ -1,4 +1,4 @@
-import { AIClient, AIClientConfig, buildMemorySection } from './ai-client'
+import { AIClient, AIClientConfig, buildMemorySection, buildContextSection } from './ai-client'
 import { ProviderAdapter, ProviderEvent, ProviderInput } from './session-types'
 import { mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -25,13 +25,27 @@ export class LocalProvider implements ProviderAdapter {
     yield { type: 'thinking', content: '正在分析聊天内容...' }
 
     try {
-      const systemPrompt = (input.customPrompt || this.aiClient.getSystemPrompt()) + buildMemorySection(input.memoryCards)
+      console.log('[LocalProvider] input.userInput:', input.userInput ? `"${input.userInput.slice(0, 100)}"` : '(empty)')
+      console.log('[LocalProvider] input.objectRelation:', input.objectRelation || '(empty)')
+      console.log('[LocalProvider] input.objectTitle:', input.objectTitle || '(empty)')
+      const basePrompt = this.aiClient.getSystemPrompt()
+      const modeRuleSection = input.customPrompt ? `\n\n## 回复模式专属规则\n${input.customPrompt}` : ''
+      const memorySection = buildMemorySection(input.memoryCards)
+      const contextSection = buildContextSection({
+        objectRelation: input.objectRelation,
+        objectTitle: input.objectTitle,
+        userInput: input.userInput
+      })
+      console.log('[LocalProvider] contextSection:', contextSection ? `"${contextSection.slice(0, 200)}"` : '(empty)')
+      const systemPrompt = basePrompt + modeRuleSection + memorySection + contextSection
+      console.log('[LocalProvider] systemPrompt length:', systemPrompt.length)
+
       let reply: string | null
 
       if (input.extractedText && !input.screenshot) {
-        reply = await this.aiClient.getTextReply(systemPrompt, input.extractedText)
+        reply = await this.aiClient.getTextReply(systemPrompt, input.extractedText, input.userInput)
       } else if (input.screenshot) {
-        reply = await this.aiClient.getReplyWithPrompt(systemPrompt, input.screenshot, input.extractedText)
+        reply = await this.aiClient.getReplyWithPrompt(systemPrompt, input.screenshot, input.extractedText, input.userInput)
       } else {
         reply = null
       }

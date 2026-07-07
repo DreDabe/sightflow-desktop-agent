@@ -25,7 +25,7 @@ interface RuntimeHostOptions<TState> {
   getAutoReply?: () => boolean
   onRecommendReply?: (text: string) => void
   identifyContact?: (screenshot: string) => Promise<string>
-  resolveMode?: (contactName: string) => { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
+  resolveMode?: (contactName: string) => { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string; objectRelation: string; objectTitle: string } | null
   onSetAutoReply?: (autoReply: boolean) => void
   onStandbyChange?: (standby: boolean) => void
 }
@@ -134,6 +134,7 @@ export class RuntimeHost<TState> {
       state.consecutiveNoChangeRounds = 0
       this.log('thinking', '用户操作，退出待机状态')
       this.options.onStandbyChange?.(false)
+      this.enqueue({ type: 'observe_chat' })
     }
   }
 

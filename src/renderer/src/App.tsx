@@ -92,6 +92,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'reply.skip.toast': '已跳过本次推荐回复',
     'reply.pending': '待处理',
     'reply.standby': '待机中',
+    'userInput.title': '用户输入',
+    'userInput.placeholder': '输入你希望 AI 参考的内容，为空则按原逻辑回复',
+    'userInput.clear': '清除',
     'sidebar.expand': '展开菜单',
     'sidebar.collapse': '收起菜单',
     'sidebar.settings': '设置',
@@ -202,6 +205,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'reply.skip.toast': 'Skipped this recommended reply',
     'reply.pending': 'Pending',
     'reply.standby': 'Standby',
+    'userInput.title': 'User Input',
+    'userInput.placeholder': 'Enter content for AI to reference; leave empty for default logic',
+    'userInput.clear': 'Clear',
     'sidebar.expand': 'Expand',
     'sidebar.collapse': 'Collapse',
     'sidebar.settings': 'Settings',
@@ -522,6 +528,7 @@ function App() {
   const [pendingModeIds, setPendingModeIds] = useState<Set<string>>(new Set())
   const [locale, setLocaleState] = useState<Locale>('zh')
   const [theme, setThemeState] = useState<'dark' | 'light'>('dark')
+  const [modeUserInputs, setModeUserInputs] = useState<Map<string, string>>(new Map())
 
   const t = useCallback((key: string): string => {
     return translations[locale]?.[key] ?? translations.zh[key] ?? key
@@ -766,7 +773,7 @@ function App() {
 
         <main className="main-content">
           {activeMode ? (
-            <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeIds={standbyModeIds} pendingModeIds={pendingModeIds} />
+            <ModeSubInterface key={activeMode.id} mode={activeMode} modeState={getModeState(activeMode.id)} updateModeState={(patch) => updateModeState(activeMode.id, patch)} onModesChanged={loadModes} standbyModeIds={standbyModeIds} pendingModeIds={pendingModeIds} userInput={modeUserInputs.get(activeMode.id) || ''} onUserInputChange={(val) => setModeUserInputs((prev) => { const next = new Map(prev); next.set(activeMode.id, val); return next })} />
           ) : (
             <div className="main-content-empty">
               <p>{t('sidebar.empty')}</p>
@@ -793,7 +800,9 @@ function ModeSubInterface({
   updateModeState,
   onModesChanged,
   standbyModeIds,
-  pendingModeIds
+  pendingModeIds,
+  userInput,
+  onUserInputChange
 }: {
   mode: ReplyMode
   modeState: ModeState
@@ -801,6 +810,8 @@ function ModeSubInterface({
   onModesChanged: () => void
   standbyModeIds: Set<string>
   pendingModeIds: Set<string>
+  userInput: string
+  onUserInputChange: (val: string) => void
 }): React.JSX.Element {
   const { t } = useI18n()
   const [modeData, setModeData] = useState(mode)
@@ -828,6 +839,10 @@ function ModeSubInterface({
   useEffect(() => {
     setModeData(mode)
   }, [mode])
+
+  useEffect(() => {
+    void window.electron?.invoke('engine:setUserInput', modeData.id, userInput)
+  }, [userInput, modeData.id, modeRunning])
 
   useEffect(() => {
     const el = logRef.current
@@ -1031,6 +1046,26 @@ function ModeSubInterface({
             </table>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{t('userInput.title')}</span>
+          <button
+            className="btn btn-secondary btn-sm user-input-clear-btn"
+            onClick={() => onUserInputChange('')}
+            disabled={!userInput}
+          >
+            {t('userInput.clear')}
+          </button>
+        </div>
+        <textarea
+          className="form-input user-input-textarea"
+          value={userInput}
+          onChange={(e) => onUserInputChange(e.target.value)}
+          placeholder={t('userInput.placeholder')}
+          rows={2}
+        />
       </div>
 
       <div className="card">

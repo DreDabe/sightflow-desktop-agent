@@ -11,6 +11,9 @@ export interface ProviderInput {
   sentimentResult?: SentimentResult
   extractedText?: string
   customPrompt?: string
+  userInput?: string
+  objectRelation?: string
+  objectTitle?: string
 }
 
 export type ProviderEvent =
@@ -46,7 +49,7 @@ export interface RuntimeHostControls {
   getAutoReply(): boolean
   recommendReply(text: string): void
   identifyContact(screenshot: string): Promise<string>
-  resolveMode(contactName: string): { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
+  resolveMode(contactName: string): { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string; objectRelation: string; objectTitle: string } | null
   setAutoReply(autoReply: boolean): void
   notifyStandby?(standby: boolean): void
   exitStandby?(): void

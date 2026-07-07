@@ -10,6 +10,9 @@ export interface ModeHandler {
   sentimentEnabled: boolean
   unifiedPrefix: string
   replyModelHasVision: boolean
+  userInput: string
+  objectRelation: string
+  objectTitle: string
   onRecommendReply: (text: string) => void
   onLog: (type: 'thinking' | 'reply' | 'skip' | 'error', content: string) => void
   onStandbyChange: (standby: boolean) => void
@@ -75,6 +78,14 @@ export class GenericChannelSession implements ChannelSession<SystemChannelState>
     }
   }
 
+  updateModeUserInput(modeId: string, userInput: string): void {
+    const handler = this.modeHandlers.get(modeId)
+    console.log(`[GenericChannelSession] updateModeUserInput: modeId=${modeId}, userInput="${userInput?.slice(0, 80) || ''}", handlerFound=${!!handler}`)
+    if (handler) {
+      handler.userInput = userInput
+    }
+  }
+
   getRunningModeIds(): string[] {
     return Array.from(this.modeHandlers.keys())
   }
@@ -96,6 +107,9 @@ export class GenericChannelSession implements ChannelSession<SystemChannelState>
     }
     const handler = this.modeHandlers.get(modeId)
     handler?.onLog('thinking', '用户操作，退出待机状态')
+    this.device.clearChatBaseline()
+    ctx.state.latestChatBaseline = 0
+    ctx.host.enqueue({ type: 'observe_chat' })
   }
 
   private _context: ChannelContext<SystemChannelState> | null = null
@@ -395,7 +409,7 @@ export class GenericChannelSession implements ChannelSession<SystemChannelState>
   }
 
   private resolveHandler(
-    resolvedMode: { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string } | null
+    resolvedMode: { modeId: string; modeName: string; prompt: string; autoReply: boolean; sentimentEnabled: boolean; unifiedPrefix: string; objectRelation: string; objectTitle: string } | null
   ): ModeHandler | null {
     if (resolvedMode) {
       const handler = this.modeHandlers.get(resolvedMode.modeId)
@@ -404,6 +418,8 @@ export class GenericChannelSession implements ChannelSession<SystemChannelState>
         handler.autoReply = resolvedMode.autoReply
         handler.sentimentEnabled = resolvedMode.sentimentEnabled
         handler.unifiedPrefix = resolvedMode.unifiedPrefix
+        handler.objectRelation = resolvedMode.objectRelation
+        handler.objectTitle = resolvedMode.objectTitle
         return handler
       }
     }
@@ -463,7 +479,10 @@ export class GenericChannelSession implements ChannelSession<SystemChannelState>
         currentContact: ctx.state.currentContactName || undefined,
         ...(handler.prompt ? { customPrompt: handler.prompt } : {}),
         ...(sentimentResult ? { sentimentResult } : {}),
-        ...(extractedText ? { extractedText } : {})
+        ...(extractedText ? { extractedText } : {}),
+        ...(handler.userInput ? { userInput: handler.userInput } : {}),
+        ...(handler.objectRelation ? { objectRelation: handler.objectRelation } : {}),
+        ...(handler.objectTitle ? { objectTitle: handler.objectTitle } : {})
       })) {
         if (!ctx.host.isRunning()) break
 
