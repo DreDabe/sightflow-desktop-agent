@@ -112,6 +112,7 @@ AutoReply's most differentiated capability — letting AI **learn and accumulate
 - **Vision model** and **reply model** configured separately for flexible combination
 - Model capability tags (text/vision/audio) with connection testing
 - Non-vision reply models automatically enable text extraction mode
+- Click anywhere on model card to open editor, one-click connection test button
 
 ### 📱 Multi-Platform IM Support
 
