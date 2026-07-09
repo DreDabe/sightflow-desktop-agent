@@ -44,12 +44,12 @@ export function buildContextSection(options: ContextSectionOptions): string {
 规则：回复中必须使用"${options.objectTitle.trim()}"统一称呼对方，不可替换为其他称呼、不可省略。`)
   }
   if (options.userInput?.trim()) {
-    parts.push(`## 我方基础原始回复（最高优先级，必须遵守）
+    parts.push(`## 我方基础原始回复
 我方基础原始回复内容：${options.userInput.trim()}
 规则：
-1. 必须以上述"我方基础原始回复内容"为核心文本进行修饰和完善，不可偏离其原意；
+1. 请以上述"我方基础原始回复内容"为核心文本进行修饰和完善，不可偏离其原意；
 2. 仅在基础文本上做语气、措辞的风格修饰（由回复模式专属规则决定），禁止自行发挥或另起回复；
-3. 基础文本的核心语义和信息不可删减、替换或改写，只能润色表达方式。`)
+3. 基础文本的核心语义和信息可进行恰当删减、替换或改写，对原句进行润色表达方式。`)
   }
   if (parts.length === 0) return ''
   return '\n\n' + parts.join('\n\n')
@@ -312,30 +312,6 @@ export class AIClient {
       thinking: { type: 'disabled' },
       stream: false
     })
-    const bodySizeKB = (bodyStr.length / 1024).toFixed(0)
-    console.log(
-      `[AIClient] callAPI 开始 | model=${this.config.model} | payload=${bodySizeKB}KB | timeout=${TIMEOUT_MS / 1000}s`
-    )
-
-    console.log('========== [DEBUG] 最终发送给模型的提示词 ==========')
-    for (const msg of messages) {
-      const role = msg.role
-      const content = msg.content
-      if (typeof content === 'string') {
-        console.log(`--- [${role}] (text, ${content.length} chars) ---`)
-        console.log(content)
-      } else if (Array.isArray(content)) {
-        for (const part of content) {
-          if (part.type === 'text') {
-            console.log(`--- [${role}] (text, ${part.text.length} chars) ---`)
-            console.log(part.text)
-          } else if (part.type === 'image_url') {
-            console.log(`--- [${role}] (image_url, ${part.image_url?.url?.length ?? 0} chars) ---`)
-          }
-        }
-      }
-    }
-    console.log('========== [DEBUG] 提示词结束 ==========')
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)

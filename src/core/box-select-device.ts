@@ -122,6 +122,10 @@ export class BoxSelectDevice implements DesktopDevice {
     return image.toDataURL()
   }
 
+  async screenshotWithHeader(): Promise<string> {
+    return this.screenshot()
+  }
+
   // 单会话模式：BoxSelectDevice 只关心"当前已经打开的对话窗口里有没有新内容"，
   // 不去扫 contactList 红点 / 点击切换会话。原因：第三方 IM（飞书 / 钉钉 / Slack 等）
   // 联系人列表布局差异太大，「激活联系人 → 回到输入框」的来回点击经常打偏，

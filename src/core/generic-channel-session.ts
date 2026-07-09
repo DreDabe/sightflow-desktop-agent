@@ -184,7 +184,8 @@ export class GenericChannelSession implements ChannelSession<SystemChannelState>
 
         let contactName = ''
         try {
-          contactName = await ctx.host.identifyContact(screenshot)
+          const screenshotWithHeader = await this.device.screenshotWithHeader()
+          contactName = await ctx.host.identifyContact(screenshotWithHeader)
           if (contactName) {
             ctx.host.log('thinking', `识别到对话对象: ${contactName}`)
           }

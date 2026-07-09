@@ -157,6 +157,15 @@ export class RPADevice implements DesktopDevice {
     return image.toDataURL()
   }
 
+  async screenshotWithHeader(): Promise<string> {
+    const { captureChatAreaWithHeader } = await import('./rpa/screenshot-utils')
+    const image = await captureChatAreaWithHeader(this.appType)
+    if (!image) {
+      throw new Error('聊天区（含标题栏）截图失败')
+    }
+    return image.toDataURL()
+  }
+
   async hasUnreadMessage(): Promise<{
     hasUnread: boolean
     chatEntranceArea?: { bbox: BBox; coordinates: [number, number] }

@@ -33,6 +33,10 @@ export class MockDevice implements DesktopDevice {
     throw new Error('No screen sources found')
   }
 
+  async screenshotWithHeader(): Promise<string> {
+    return this.screenshot()
+  }
+
   async hasUnreadMessage(): Promise<{
     hasUnread: boolean
     chatEntranceArea?: { bbox: BBox; coordinates: [number, number] }

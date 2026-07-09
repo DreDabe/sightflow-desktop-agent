@@ -343,3 +343,53 @@ export async function captureChatMainArea(appType: AppType): Promise<Electron.Na
     return null
   }
 }
+
+export async function captureChatAreaWithHeader(appType: AppType): Promise<Electron.NativeImage | null> {
+  try {
+    const { getLayoutCache, bboxToCropBounds } = await import('./vision-utils')
+
+    const layout = getLayoutCache(appType)
+    if (!layout?.chatMainArea) {
+      console.log('[captureChatAreaWithHeader] 未找到 chatMainArea 缓存')
+      return null
+    }
+
+    if (!layout.chatMainArea.bbox) {
+      console.log('[captureChatAreaWithHeader] chatMainArea 缺少 bbox')
+      return null
+    }
+
+    const windowInfo = await getWindowInfo(appType, false)
+    if (!windowInfo?.bounds) {
+      console.log('[captureChatAreaWithHeader] 获取窗口信息失败')
+      return null
+    }
+
+    const [x1, _y1, x2, y2] = layout.chatMainArea.bbox
+    const headerBbox: [number, number, number, number] = [x1, 0, x2, y2]
+
+    const cropBounds = bboxToCropBounds(headerBbox, windowInfo.bounds)
+    const crop = {
+      x: cropBounds.x,
+      y: cropBounds.y,
+      width: cropBounds.width,
+      height: cropBounds.height
+    }
+
+    const screenshotResult = await captureWechatWindow(appType, crop)
+    if (!screenshotResult.success) {
+      console.log('[captureChatAreaWithHeader] 截图失败:', screenshotResult.error)
+      return null
+    }
+
+    if (screenshotResult.nativeImage) {
+      return screenshotResult.nativeImage
+    }
+
+    console.log('[captureChatAreaWithHeader] 截图结果无 nativeImage')
+    return null
+  } catch (error: any) {
+    console.error('[captureChatAreaWithHeader] 异常:', error)
+    return null
+  }
+}

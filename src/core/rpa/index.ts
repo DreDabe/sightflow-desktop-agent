@@ -1,4 +1,4 @@
-export { captureWechatWindow, takeWeChatScreenshot, calculateRedDotPercentage, captureChatMainArea } from './screenshot-utils'
+export { captureWechatWindow, takeWeChatScreenshot, calculateRedDotPercentage, captureChatMainArea, captureChatAreaWithHeader } from './screenshot-utils'
 export type { AppType } from './types'
 export { getWindowInfo, getWechatWindowInfo } from './window-utils'
 export { sendReplyAction, activeUnreadByClickAction, clickUnreadContactAction } from './input-utils'

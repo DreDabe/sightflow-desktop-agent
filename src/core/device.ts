@@ -35,6 +35,9 @@ export interface DesktopDevice {
   /** 全窗口截图 → base64 */
   screenshot(): Promise<string>
 
+  /** 截取包含标题栏的聊天区域（用于识别联系人名称） */
+  screenshotWithHeader(): Promise<string>
+
   /**
    * Step 1 粗检测：聊天入口是否有红点？
    * 内部流程: 定位 chatEntranceArea / contactList → 局部 crop → 红点像素扫描。
