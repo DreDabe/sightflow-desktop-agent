@@ -7,7 +7,7 @@ const translations = {
   zh: {
     // Header
     'app.title': 'AutoReply - 智能回复助手',
-    'app.version': 'v1.2.0',
+    'app.version': 'v1.2.1',
 
     // Tabs
     'tab.control': '控制',
@@ -68,7 +68,7 @@ const translations = {
   },
   en: {
     'app.title': 'AutoReply - Smart Reply Assistant',
-    'app.version': 'v1.2.0',
+    'app.version': 'v1.2.1',
 
     'tab.control': 'Control',
     'tab.settings': 'Settings',

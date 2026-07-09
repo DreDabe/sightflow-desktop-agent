@@ -907,6 +907,18 @@ textarea.form-input {
   z-index: 1000;
 }
 
+.modal-overlay-in-content {
+  inset: unset !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: var(--sidebar-width, 180px) !important;
+}
+
+.modal-overlay-full {
+  inset: 0 !important;
+}
+
 .modal-content {
   background: var(--bg-primary);
   border: 1px solid var(--glass-border-light);
@@ -916,6 +928,45 @@ textarea.form-input {
   max-width: 480px;
   max-height: 80vh;
   overflow-y: auto;
+}
+
+.modal-content-with-footer {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden !important;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.form-row-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-test-connection {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.btn-test-connection:hover {
+  background: rgba(16, 185, 129, 0.25);
+  color: var(--accent-hover);
 }
 
 /* ─── Main Shell (Left Sidebar + Mode Sub-Interface) ─── */

@@ -717,7 +717,7 @@ function App() {
 
   return (
     <I18nContext.Provider value={i18nValue}>
-      <div className="app main-shell">
+      <div className="app main-shell" style={{ '--sidebar-width': sidebarCollapsed ? '48px' : '180px' } as React.CSSProperties}>
         <aside className={`main-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="main-sidebar-brand">
             <img src={theme === 'light' ? logoBlackUrl : logoUrl} alt="AutoReply" className="app-logo" />
@@ -1188,8 +1188,8 @@ function EditObjectModal({
   }, [name, title, relationship, autoReply, modeId, object.id, onSaved, t])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay modal-overlay-full" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
         <h2 style={{ marginTop: 0, marginBottom: 16 }}>{t('object.editTitle') || '编辑特定对象'}</h2>
         <div className="form-group">
           <label className="form-label">{t('object.name')} <span className="required-mark">*</span></label>
@@ -1256,8 +1256,8 @@ function AddModeModal({
   }, [name, prompt, sentimentEnabled, unifiedPrefix, onSaved, t])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay modal-overlay-full" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
         <h2 style={{ marginTop: 0, marginBottom: 16 }}>{t('mode.addTitle')}</h2>
         <div className="form-group">
           <label className="form-label">{t('mode.name')} <span className="required-mark">*</span></label>
@@ -1268,11 +1268,13 @@ function AddModeModal({
           <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('mode.prompt.placeholder')} rows={4} />
         </div>
         <div className="form-group">
-          <label className="form-label">{t('mode.sentiment')}</label>
-          <label className="toggle-switch">
-            <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
-            <span className="toggle-slider" />
-          </label>
+          <div className="form-row-inline">
+            <label className="form-label" style={{ marginBottom: 0 }}>{t('mode.sentiment')}</label>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
+              <span className="toggle-slider" />
+            </label>
+          </div>
           <div className="form-hint">{t('mode.sentiment.hint')}</div>
         </div>
         <div className="form-group">
@@ -1324,8 +1326,8 @@ function AddObjectModal({
   }, [name, title, relationship, targetModeId, autoReply, modeId, onSaved, t])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay modal-overlay-full" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-content" onMouseDown={(e) => e.stopPropagation()}>
         <h2 style={{ marginTop: 0, marginBottom: 16 }}>{t('object.addTitle')}</h2>
         <div className="form-group">
           <label className="form-label">{t('object.name')} <span className="required-mark">*</span></label>
@@ -1711,7 +1713,7 @@ function ModelConfigPanel(): React.JSX.Element {
             {filteredModels.map((model) => {
               const preset = PROVIDER_PRESETS.find((p) => p.id === model.provider)
               return (
-                <div key={model.id} className="provider-card" style={{ cursor: 'default' }}>
+                <div key={model.id} className="provider-card" style={{ cursor: 'pointer', height: 'auto' }} onClick={() => { setEditingModel(model); setShowAddModal(true) }}>
                   <div className="provider-card-top">
                     <span className="provider-name">
                       {model.name}
@@ -1750,26 +1752,19 @@ function ModelConfigPanel(): React.JSX.Element {
                   <div className="provider-desc">
                     {model.modelName} · {model.baseURL || '默认端点'}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'space-between' }}>
                     <button
-                      className="btn btn-secondary"
-                      style={{ fontSize: 12, padding: '4px 10px' }}
-                      onClick={() => { setEditingModel(model); setShowAddModal(true) }}
-                    >
-                      编辑
-                    </button>
-                    <button
-                      className="btn btn-secondary"
+                      className="btn btn-sm btn-test-connection"
                       style={{ fontSize: 12, padding: '4px 10px' }}
                       disabled={testingId === model.id}
-                      onClick={() => handleTest(model.id)}
+                      onClick={(e) => { e.stopPropagation(); handleTest(model.id) }}
                     >
                       {testingId === model.id ? '测试中...' : '测试连接'}
                     </button>
                     <button
-                      className="btn btn-secondary"
+                      className="btn btn-secondary btn-sm"
                       style={{ fontSize: 12, padding: '4px 10px', color: '#ef4444' }}
-                      onClick={() => handleDelete(model.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(model.id) }}
                     >
                       删除
                     </button>
@@ -1839,92 +1834,94 @@ function ModelEditModal({
   }, [name, provider, modelName, apiKey, baseURL, capabilities, isEdit, model, onSaved])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, marginBottom: 16 }}>{isEdit ? '编辑模型' : '添加模型'}</h2>
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-content modal-content-with-footer" onMouseDown={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16, flexShrink: 0 }}>{isEdit ? '编辑模型' : '添加模型'}</h2>
+        <div className="modal-body">
 
-        <div className="form-group">
-          <label className="form-label">供应商 <span className="required-mark">*</span></label>
-          <select className="form-input" value={provider} onChange={(e) => {
-            const p = e.target.value
-            setProvider(p)
-            if (!isEdit) {
-              const preset = PROVIDER_PRESETS.find((pr) => pr.id === p)
-              if (preset) {
-                if (!baseURL) setBaseURL(preset.defaultBaseURL)
-                if (!modelName) setModelName(preset.defaultModel)
+          <div className="form-group">
+            <label className="form-label">供应商 <span className="required-mark">*</span></label>
+            <select className="form-input" value={provider} onChange={(e) => {
+              const p = e.target.value
+              setProvider(p)
+              if (!isEdit) {
+                const preset = PROVIDER_PRESETS.find((pr) => pr.id === p)
+                if (preset) {
+                  if (!baseURL) setBaseURL(preset.defaultBaseURL)
+                  if (!modelName) setModelName(preset.defaultModel)
+                }
               }
-            }
-          }} disabled={isEdit}>
-            {PROVIDER_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">模型名称</label>
-          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的豆包模型（可选）" />
-          <div className="form-hint">用于在界面中识别此模型配置，留空则使用模型标识</div>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">模型标识 <span className="required-mark">*</span></label>
-          <input className="form-input" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="例如：doubao-seed-2-0-lite-260215" />
-          <div className="form-hint">API 调用时使用的模型 ID</div>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">API Key <span className="required-mark">*</span></label>
-          <input className="form-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="输入 API Key" autoComplete="off" />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Base URL</label>
-          <input className="form-input" value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
-          <div className="form-hint">API 端点地址，选择供应商后会自动填充</div>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">模型能力</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {([
-              { key: 'text' as ModelCapability, label: '文本', color: '#3b82f6' },
-              { key: 'vision' as ModelCapability, label: '视觉', color: '#10b981' },
-              { key: 'audio' as ModelCapability, label: '语音', color: '#f59e0b' }
-            ]).map((cap) => {
-              const active = capabilities.includes(cap.key)
-              return (
-                <button
-                  key={cap.key}
-                  type="button"
-                  onClick={() => {
-                    setCapabilities((prev) =>
-                      prev.includes(cap.key)
-                        ? prev.filter((c) => c !== cap.key)
-                        : [...prev, cap.key]
-                    )
-                  }}
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: 12,
-                    fontSize: 12,
-                    border: `1.5px solid ${active ? cap.color : '#475569'}`,
-                    background: active ? cap.color : 'transparent',
-                    color: active ? '#fff' : '#94a3b8',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s'
-                  }}
-                >
-                  {cap.label}
-                </button>
-              )
-            })}
+            }} disabled={isEdit}>
+              {PROVIDER_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
-          <div className="form-hint">点击选择该模型支持的能力，至少选择"文本"</div>
-        </div>
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <div className="form-group">
+            <label className="form-label">模型名称</label>
+            <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：我的豆包模型（可选）" />
+            <div className="form-hint">用于在界面中识别此模型配置，留空则使用模型标识</div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">模型标识 <span className="required-mark">*</span></label>
+            <input className="form-input" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="例如：doubao-seed-2-0-lite-260215" />
+            <div className="form-hint">API 调用时使用的模型 ID</div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">API Key <span className="required-mark">*</span></label>
+            <input className="form-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="输入 API Key" autoComplete="off" />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Base URL</label>
+            <input className="form-input" value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://ark.cn-beijing.volces.com/api/v3" />
+            <div className="form-hint">API 端点地址，选择供应商后会自动填充</div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">模型能力</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([
+                { key: 'text' as ModelCapability, label: '文本', color: '#3b82f6' },
+                { key: 'vision' as ModelCapability, label: '视觉', color: '#10b981' },
+                { key: 'audio' as ModelCapability, label: '语音', color: '#f59e0b' }
+              ]).map((cap) => {
+                const active = capabilities.includes(cap.key)
+                return (
+                  <button
+                    key={cap.key}
+                    type="button"
+                    onClick={() => {
+                      setCapabilities((prev) =>
+                        prev.includes(cap.key)
+                          ? prev.filter((c) => c !== cap.key)
+                          : [...prev, cap.key]
+                      )
+                    }}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: 12,
+                      fontSize: 12,
+                      border: `1.5px solid ${active ? cap.color : '#475569'}`,
+                      background: active ? cap.color : 'transparent',
+                      color: active ? '#fff' : '#94a3b8',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {cap.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="form-hint">点击选择该模型支持的能力，至少选择"文本"</div>
+          </div>
+
+        </div>
+        <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>取消</button>
           <button className="btn btn-primary" onClick={handleSave}>{isEdit ? '保存' : '添加'}</button>
         </div>
@@ -2026,14 +2023,14 @@ function ModeManagePanel(): React.JSX.Element {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 7 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 7 }}>
                 <div className="provider-desc" style={{ flex: 1, maxHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {mode.prompt.slice(0, 80)}{mode.prompt.length > 80 ? '...' : ''}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => handleToggleEnabled(mode.id, !mode.enabled)}
+                    onClick={(e) => { e.stopPropagation(); handleToggleEnabled(mode.id, !mode.enabled) }}
                   >
                     {mode.enabled ? '禁用' : '启用'}
                   </button>
@@ -2041,7 +2038,7 @@ function ModeManagePanel(): React.JSX.Element {
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ color: '#ef4444' }}
-                      onClick={() => handleDelete(mode.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(mode.id) }}
                     >
                       删除
                     </button>
@@ -2104,52 +2101,58 @@ function ModeDetailModal({
   }, [mode.id, name, prompt, sentimentEnabled, unifiedPrefix, autoReply, onSaved])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0, marginBottom: 16 }}>模式详情 - {mode.name}</h2>
-        <div className="form-group">
-          <label className="form-label">模式名称</label>
-          <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">回复规则 (Prompt)</label>
-          <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={6} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">情感分析</label>
-          <label className="toggle-switch">
-            <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
-            <span className="toggle-slider" />
-          </label>
-        </div>
-        <div className="form-group">
-          <label className="form-label">统一开头</label>
-          <input className="form-input" value={unifiedPrefix} onChange={(e) => setUnifiedPrefix(e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label className="form-label">自动回复</label>
-          <label className="toggle-switch">
-            <input type="checkbox" checked={autoReply} onChange={(e) => setAutoReply(e.target.checked)} />
-            <span className="toggle-slider" />
-          </label>
-        </div>
-        {mode.specificObjects.length > 0 && (
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal-content modal-content-with-footer" onMouseDown={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0, marginBottom: 16, flexShrink: 0 }}>模式详情 - {mode.name}</h2>
+        <div className="modal-body">
           <div className="form-group">
-            <label className="form-label">特定对象 ({mode.specificObjects.length})</label>
-            <div className="object-list">
-              {mode.specificObjects.map((obj) => (
-                <div key={obj.id} className="object-item">
-                  <div className="object-item-info">
-                    <span className="object-item-name">{obj.name}</span>
-                    {obj.title && <span className="object-item-detail">称呼: {obj.title}</span>}
-                    {obj.relationship && <span className="object-item-detail">关系: {obj.relationship}</span>}
-                  </div>
-                </div>
-              ))}
+            <label className="form-label">模式名称</label>
+            <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">回复规则 (Prompt)</label>
+            <textarea className="form-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={6} />
+          </div>
+          <div className="form-group">
+            <div className="form-row-inline">
+              <label className="form-label" style={{ marginBottom: 0 }}>情感分析</label>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={sentimentEnabled} onChange={(e) => setSentimentEnabled(e.target.checked)} />
+                <span className="toggle-slider" />
+              </label>
             </div>
           </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <div className="form-group">
+            <label className="form-label">统一开头</label>
+            <input className="form-input" value={unifiedPrefix} onChange={(e) => setUnifiedPrefix(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <div className="form-row-inline">
+              <label className="form-label" style={{ marginBottom: 0 }}>自动回复</label>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={autoReply} onChange={(e) => setAutoReply(e.target.checked)} />
+                <span className="toggle-slider" />
+              </label>
+            </div>
+          </div>
+          {mode.specificObjects.length > 0 && (
+            <div className="form-group">
+              <label className="form-label">特定对象 ({mode.specificObjects.length})</label>
+              <div className="object-list">
+                {mode.specificObjects.map((obj) => (
+                  <div key={obj.id} className="object-item">
+                    <div className="object-item-info">
+                      <span className="object-item-name">{obj.name}</span>
+                      {obj.title && <span className="object-item-detail">称呼: {obj.title}</span>}
+                      {obj.relationship && <span className="object-item-detail">关系: {obj.relationship}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>取消</button>
           <button className="btn btn-primary" onClick={handleSave}>保存</button>
         </div>
