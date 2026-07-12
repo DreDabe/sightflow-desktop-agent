@@ -44,10 +44,6 @@ export function createProvider(context) {
         objectTitle: input.objectTitle,
         userInput: input.userInput
       })
-      console.log('[provider.bundle.js] input.userInput:', input.userInput ? `"${input.userInput.slice(0, 80)}"` : '(empty)')
-      console.log('[provider.bundle.js] input.objectRelation:', input.objectRelation || '(empty)')
-      console.log('[provider.bundle.js] input.objectTitle:', input.objectTitle || '(empty)')
-      console.log('[provider.bundle.js] contextSection:', contextSection ? `"${contextSection.slice(0, 200)}"` : '(empty)')
       yield {
         type: 'thinking',
         content: memorySection
@@ -115,19 +111,6 @@ async function requestReply({ screenshot, extractedText, apiKey, model, baseURL,
     thinking: { type: 'disabled' },
     stream: false
   }
-
-  console.log('========== [DEBUG] 最终发送给模型的提示词 (provider.bundle.js) ==========')
-  console.log(`--- [system] (text, ${systemPrompt.length} chars) ---`)
-  console.log(systemPrompt)
-  for (const part of userContent) {
-    if (part.type === 'text') {
-      console.log(`--- [user] (text, ${part.text.length} chars) ---`)
-      console.log(part.text)
-    } else if (part.type === 'image_url') {
-      console.log(`--- [user] (image_url, ${part.image_url?.url?.length ?? 0} chars) ---`)
-    }
-  }
-  console.log('========== [DEBUG] 提示词结束 ==========')
 
   const response = await fetch(`${effectiveBaseURL}/chat/completions`, {
     method: 'POST',

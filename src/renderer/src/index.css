@@ -1067,6 +1067,14 @@ textarea.form-input {
   border-radius: 50%;
 }
 
+.main-sidebar.collapsed .main-sidebar-divider:last-of-type {
+  display: none;
+}
+
+.main-sidebar.collapsed .main-sidebar-divider {
+  margin: 4px 2px;
+}
+
 .main-sidebar-item-name {
   flex: 1;
   overflow: hidden;

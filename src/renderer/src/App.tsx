@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo, createContext, useContext } from 'react'
 import logoUrl from './assets/logo.png'
 import logoBlackUrl from './assets/logo_black.png'
+import logoShortUrl from './assets/logo_short.png'
+import logoBlackShortUrl from './assets/logo_black_short.png'
 import MemoryWindow from './MemoryWindow'
 import './index.css'
 
@@ -720,7 +722,13 @@ function App() {
       <div className="app main-shell" style={{ '--sidebar-width': sidebarCollapsed ? '48px' : '180px' } as React.CSSProperties}>
         <aside className={`main-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="main-sidebar-brand">
-            <img src={theme === 'light' ? logoBlackUrl : logoUrl} alt="AutoReply" className="app-logo" />
+            <img
+              src={sidebarCollapsed
+                ? (theme === 'light' ? logoBlackShortUrl : logoShortUrl)
+                : (theme === 'light' ? logoBlackUrl : logoUrl)}
+              alt="AutoReply"
+              className="app-logo"
+            />
           </div>
           <button
             className="main-sidebar-collapse-btn"

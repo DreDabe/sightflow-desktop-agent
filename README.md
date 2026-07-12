@@ -152,8 +152,8 @@ flowchart LR
 ### 1. 安装依赖
 
 ```bash
-git clone https://github.com/your-org/autoreply-desktop-agent.git
-cd autoreply-desktop-agent
+git clone https://github.com/DreDabe/auto-reply.git
+cd auto-reply
 
 npm install
 ```
@@ -269,6 +269,14 @@ src/
 - API Key 通过 electron-store 本地加密存储
 - Skill HTTP Server 仅监听 `127.0.0.1:12680`
 - **你的工作数据始终属于你**
+
+---
+
+## 💬 问题与交流
+
+如有问题、建议或反馈，欢迎通过以下方式联系：
+
+- 📧 邮箱：[dreadabe@gmail.com](mailto:dreadabe@gmail.com)
 
 ---
 

@@ -152,8 +152,8 @@ AutoReply's most differentiated capability — letting AI **learn and accumulate
 ### 1. Install Dependencies
 
 ```bash
-git clone https://github.com/your-org/autoreply-desktop-agent.git
-cd autoreply-desktop-agent
+git clone https://github.com/DreDabe/auto-reply.git
+cd auto-reply
 
 npm install
 ```
@@ -269,6 +269,14 @@ src/
 - API Keys stored locally via electron-store with encryption
 - Skill HTTP Server only listens on `127.0.0.1:12680`
 - **Your work data always belongs to you**
+
+---
+
+## 💬 Questions & Contact
+
+For questions, suggestions, or feedback, feel free to reach out:
+
+- 📧 Email: [dreadabe@gmail.com](mailto:dreadabe@gmail.com)
 
 ---
 
