@@ -4,7 +4,7 @@
 
 <h1>AutoReply · Smart Reply Assistant</h1>
 
-<p><strong>AI that understands conversation emotions and replies like a real person — see the screen, detect sentiment, reply intelligently, accumulate experience.</strong></p>
+<p><strong>AI-powered desktop intelligent auto-reply system — see the screen, identify contacts, reply intelligently, accumulate experience.</strong></p>
 
 <p>
   <a href="./README.md"><b>简体中文</b></a>
@@ -16,7 +16,6 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0" /></a>
   <img src="https://img.shields.io/badge/Platform-Windows-success" alt="Platform: Windows" />
   <img src="https://img.shields.io/badge/Electron-39-blue" alt="Electron 39" />
-  <img src="https://img.shields.io/badge/Model-BERT%20Base%20Chinese-yellow" alt="BERT Base Chinese" />
 </p>
 
 <p>
@@ -34,9 +33,9 @@
 
 ## 📌 Overview
 
-**AutoReply (Smart Reply Assistant)** is a VLM-powered desktop intelligent auto-reply system focused on instant messaging scenarios. The system automatically monitors chat windows, understands conversation content and emotional states, generates personalized replies, and accumulates reusable dialogue experience from every interaction.
+**AutoReply (Smart Reply Assistant)** is a VLM-powered desktop intelligent auto-reply system focused on instant messaging scenarios. The system automatically monitors chat windows, understands conversation content, generates personalized replies, and accumulates reusable dialogue experience from every interaction.
 
-Built on the [SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agent) open-source project with deep secondary development, it retains the original vision-driven automation capabilities while adding **BERT sentiment classification, multi-mode management, specific contact routing, semi-auto reply, and working memory engine** — upgrading the project from a general-purpose RPA tool to a conversation-focused intelligent reply platform.
+Built on the [SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agent) open-source project with deep secondary development, it retains the original vision-driven automation capabilities while adding **multi-mode management, specific contact routing, semi-auto reply, working memory engine, and sentiment analysis** — upgrading the project from a general-purpose RPA tool to a conversation-focused intelligent reply platform.
 
 ---
 
@@ -47,15 +46,15 @@ Built on the [SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agen
 | Capability | Description |
 | :-- | :-- |
 | **Vision-Driven** | VLM automatically identifies chat window layout and extracts message content — no API integration needed |
-| **Sentiment-Aware** | Built-in BERT sentiment classification module with 5-level depression tendency detection and automatic care strategy injection |
 | **Semi-Auto Reply** | AI recommends reply → user one-click paste/reply/skip — human-AI collaboration for safety |
 | **Full Automation** | Three-level auto-reply switches (global / mode / contact) — unattended operation supported |
+| **Sentiment Analysis** | Optional BERT sentiment classification to detect conversation emotional tendencies and assist in generating context-aware replies |
 
 ### 🧠 Multi-Mode Management
 
 | Capability | Description |
 | :-- | :-- |
-| **Preset Modes** | Depression prediction, romance, high EQ — built-in system modes, can be disabled but not deleted |
+| **Preset Modes** | Built-in system modes, can be disabled but not deleted |
 | **Custom Modes** | Create modes freely with custom Prompt, sentiment analysis toggle, unified prefix |
 | **Independent Runtime** | Each mode has its own running state, log stream, and recommended reply |
 | **Parallel Execution** | Multiple modes can run simultaneously, each maintaining its own conversation detection loop |
@@ -68,24 +67,6 @@ Built on the [SightFlow](https://github.com/sightflow-dev/sightflow-desktop-agen
 | **Smart Routing** | Matched contact → route to dedicated mode; unmatched → use global default mode |
 | **Personalized Config** | Each contact can have specific title, relationship description, and independent auto-reply strategy |
 | **Prompt Injection** | Contact's title and relationship are automatically injected into the Prompt for context-aware replies |
-
-### 💛 BERT Sentiment Classification
-
-```mermaid
-flowchart LR
-    A["Chat Screenshot"] --> B["VLM Text Extraction"]
-    B --> C["BERT Sentiment Classification"]
-    C --> D["5-Level Depression Tendency"]
-    D --> E["Context-Aware<br/>Care Reply Generation"]
-```
-
-| Level | Category | Care Strategy |
-| :-- | :-- | :-- |
-| 0 | No depression | Normal conversation reply |
-| 1 | Mild depression | Gentle care, encourage expression |
-| 2 | Moderate depression | Active listening, emotional support |
-| 3 | Severe depression | Deep empathy, suggest professional help |
-| 4 | Extreme depression | Strongly recommend medical attention, provide hotline info |
 
 ### 📚 Working Memory Engine
 
@@ -129,13 +110,13 @@ AutoReply's most differentiated capability — letting AI **learn and accumulate
 | Dimension | SightFlow (Original) | AutoReply (This Project) |
 | :-- | :-- | :-- |
 | **Positioning** | General desktop RPA tool | Conversation-focused intelligent reply platform |
-| **Sentiment Understanding** | None | ✅ BERT 5-level sentiment classification + automatic care strategies |
 | **Reply Modes** | Single global mode | ✅ Multi-mode management + custom Prompt + independent runtime |
 | **Contact Recognition** | None | ✅ VLM contact identification + specific contact routing + personalized config |
 | **Reply Method** | Full-auto only | ✅ Semi-auto (recommend/paste/reply/skip) + full-auto, three-level auto-reply priority |
 | **Experience Accumulation** | Work trace recording | ✅ Trace recording + playback + experience accumulation + runtime injection + quantifiable effectiveness |
 | **Model Configuration** | Fixed Volcengine Ark | ✅ Multi-provider support + vision/reply model separation + capability tags |
 | **Standby Management** | None | ✅ Progressive backoff standby + semantic confirmation exit + status visualization |
+| **Sentiment Analysis** | None | ✅ Optional BERT sentiment classification + emotion-aware reply strategy |
 | **Model Training** | None | ✅ Built-in training UI + Kaggle dataset + real-time progress streaming |
 | **Human Correction** | None | ✅ Trace step correction → accumulated as experience cards |
 
@@ -146,7 +127,7 @@ AutoReply's most differentiated capability — letting AI **learn and accumulate
 ### Prerequisites
 
 - **Node.js** (LTS version)
-- **Python 3.8+** (required for sentiment classification module)
+- **Python 3.8+** (required for sentiment analysis module)
 - **npm**
 
 ### 1. Install Dependencies
@@ -203,13 +184,14 @@ Manage AI models from different providers in the **Model Configuration** section
 - Connection testing supported to verify configuration
 - Model capabilities auto-tagged — vision models for layout detection, text models for reply generation
 
-### Sentiment Model Training
+### Sentiment Analysis
 
-Operate in the **Model Training** section of settings:
+Enable sentiment analysis in mode settings:
 
-1. Click **Start Training** — automatically downloads dataset and starts training
+1. In **Model Training**, click **Start Training** — automatically downloads dataset and starts training
 2. Training logs display in real-time in the log view below
 3. After training, the model is automatically saved as `sentpredict/models/best.pt`
+4. Enable the sentiment analysis toggle in mode details to use
 
 > ⚠️ Training takes a long time (hours). First-time training requires downloading BERT pre-trained weights and dataset.
 
@@ -265,7 +247,7 @@ src/
 ## 🔐 Security & Data
 
 - Work traces and experience cards are **stored locally by default** — never uploaded to any server
-- Sentiment classification runs in a local Python subprocess — text data never leaves your machine
+- Sentiment analysis runs in a local Python subprocess — text data never leaves your machine
 - API Keys stored locally via electron-store with encryption
 - Skill HTTP Server only listens on `127.0.0.1:12680`
 - **Your work data always belongs to you**
